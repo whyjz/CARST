@@ -1,0 +1,72 @@
+\documentclass[12pt]{article}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{lineno}
+\usepackage{natbib}
+\usepackage[margin=1in]{geometry}
+
+\newenvironment{myindentpar}[1]%
+{\begin{list}{}%
+ {\setlength{\leftmargin}{#1}}%
+  \item[]%
+ }
+{\end{list}}
+
+\title{Preparing Elevation Data Using ``aggregate.py''}
+
+\author{Andrew Kenneth Melkonian}
+\begin{document}
+
+\maketitle
+
+\vspace{2pt}
+\hrule
+\vspace{6pt}
+\noindent {\bf aggregate.py}
+\vspace{6pt}
+\hrule
+\vspace{16pt}
+
+\noindent {\bf \underline{Description}:} \\
+
+\noindent ``aggregate.py'' reads five-column ASCII text files (longitude, latitude, elevation, date in decimal years, uncertainty), with each file corresponding to a DEM, with the path to the reference DEM specified separately.
+It creates five-column ASCII text files as output, with the columns the same as the input DEMs.
+The data in the output files is organized on a pixel-by-pixel basis, with pixels separated by a single line containing the greater than character (``$>$'', e.g., GMT polygon file format).
+This script prepares the input for the ``weightedRegression.py'' script. \\
+
+\noindent {\bf \underline{Dependencies}:} \\
+
+\noindent {\bf Python} \\
+
+\noindent {\bf \underline{Usage}:} \\
+
+\noindent python aggregate.py reference\_dem\_txt\_path input\_dem\_txts\_directory identifier increments \\
+
+\noindent {\bf \underline{Example}:} \\
+
+\noindent python /path/to/ref\_dem.txt /path/to/inputs/ app 5 \\
+
+\noindent {\bf \underline{Input Parameters}:} \\
+
+\noindent {\bf reference\_dem\_txt\_path:} Path to 5-column ASCII text file of longitudes, latitudes, elevations, date in decimal years, and uncertainties for reference DEM. \\
+
+\noindent {\bf input\_dem\_txts\_directory:} Path to directory containing input DEMs. The ASCII text file for each input DEM must have the same format as the ASCII text file for the reference DEM. \\
+
+\noindent {\bf identifier:} String value, input DEMs in input\_dem\_txts\_directory must end in "identifier.txt" to be read in. \\
+
+\noindent {\bf increments:} Must be a number; the output will be split into this many files (e.g., "glacier\_ice\_values\_1.txt", "glacier\_ice\_values\_2.txt" if increments is "2"). \\
+
+\noindent {\bf \underline{Output}:} \\
+
+\noindent ASCII text file(s) with all of the data organized by pixel (pixels separated by single lines containing ``$>$'' character).
+The "increments" input parameter determines how many of these will be made.
+Each file has five columns: \\
+1) Longitude (floating point) \\
+2) Latitude (floating point) \\
+3) Elevation (floating point) \\
+4) Decimal year (floating point) \\
+5) Uncertainty (floating point) \\
+
+
+
+\end{document}

@@ -1,7 +1,7 @@
 # CARST
 
 -------------------------------------
-Cryoshpere And Remote Sensing Toolkit
+Cryosphere And Remote Sensing Toolkit
 -------------------------------------
 
 The toolkit provides useful python and bash scripts that
@@ -12,7 +12,7 @@ approaches: ice elevation changes (also known as dh/dt)
 and pixel tracking.
 
 ------------------
-REQUIRED SOFTWARES
+REQUIRED SOFTWARE
 ------------------
 
 dh/dt          -> python

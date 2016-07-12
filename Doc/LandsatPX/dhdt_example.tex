@@ -1,0 +1,33 @@
+\documentclass[12pt]{article}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{lineno}
+\usepackage{natbib}
+\usepackage[margin=1in]{geometry}
+
+\newenvironment{myindentpar}[1]%
+{\begin{list}{}%
+ {\setlength{\leftmargin}{#1}}%
+  \item[]%
+ }
+{\end{list}}
+
+\title{Running $\frac{dh}{dt}$ Example}
+
+\author{Andrew Kenneth Melkonian}
+\begin{document}
+
+\maketitle
+
+\noindent {\bf \underline{Instructions}:} \\
+
+\noindent {\bf 1:} Enter the command ``python aggregate.py ref\_dem.txt . rr 1''. This will create ``glacier\_elevs\_1.txt''.
+
+\noindent {\bf 2:} Enter the command ``weightedRegression.py glacier\_elevs\_1.txt glacier\_dhdt 1999 2015 5 30 first''. This will create ``glacier\_dhdt\_p5m30.txt''. \\
+
+\noindent {\bf \underline{Further Information}:} \\
+
+\noindent Please read the documentation for ``aggregate.py'' and ``weightedRegression.py''.
+
+
+\end{document}
