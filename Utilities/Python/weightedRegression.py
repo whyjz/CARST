@@ -6,7 +6,11 @@
 # All rights reserved
 
 
+# Some Comments are added by Whyjay Zheng, Jul 21 2016.
+
 def sort2DList(input_list, column):
+
+	""" sort2DList: sort input_list by given column, in ascendind order."""
 
 	length = len(input_list);
 	width  = len(input_list[0]);
@@ -93,6 +97,7 @@ def weightedRegression(input_elevs_path, output_label, min_year, max_year, upper
 
 			coord = sort2DList(coord, 2);
 
+			# min_unc = Minimum uncertainty
 			min_unc_date  = coord[0][0];
 			min_unc_elev  = coord[0][1];
 			min_unc_stdev = coord[0][2];
@@ -101,13 +106,17 @@ def weightedRegression(input_elevs_path, output_label, min_year, max_year, upper
 
 			for i in range(0, len(coord)):
 
+				# cur = current
 				cur_date  = coord[i][0];
 				cur_elev  = coord[i][1];
 				cur_stdev = coord[i][2];
 
+				# If the date is beyond the given time span [min_year max_year], then discard it
 				if float(cur_date) > float(max_year) or float(cur_date) < float(min_year):
 					continue;
 
+				# Here we fix the reference type to "first" (The last argument in the documentation doesn't work)
+				# That means the first DEM will be set as reference DEM
 				ref_date  = first_date;
 				ref_elev  = first_elev;
 				ref_stdev = first_stdev;
@@ -127,6 +136,9 @@ def weightedRegression(input_elevs_path, output_label, min_year, max_year, upper
 				cur_lower_bound = 0.0;
 				interval	= 0.0;
 
+				# If the elevation is beyond the possible value calculated from the rate range [lower_thres upper_thres],
+				# the discard it
+				# Note the reference DEM is always selected.
 				if float(ref_date) < float(cur_date):
 					interval        = float(cur_date) - float(ref_date);
 					cur_upper_bound = float(ref_elev) + interval * float(upper_threshold);
@@ -146,11 +158,13 @@ def weightedRegression(input_elevs_path, output_label, min_year, max_year, upper
 				accepted_coord.append(coord[i]);
 
 			coord = [];
-     
+
+			# This is the final array we want to fit with the regression model
 			accepted_coord = sorted(accepted_coord);
 
 			length = len(accepted_coord);
 
+			# Will not do the regression if the points are less than 2, or the whole time span is less than 1 yr
 			if len(accepted_coord) < 2 or abs(float(accepted_coord[0][0]) - float(accepted_coord[length - 1][0])) < 1:
 				continue;
 
@@ -161,6 +175,9 @@ def weightedRegression(input_elevs_path, output_label, min_year, max_year, upper
 
 			ws.setdiag(scipy.ones(length));
 
+			# Model: Y = m0 + m1 * X
+			# W = 1/[sqrt(C_d)], where C_d is diag(variance list --> square of uncertainty list)
+			# Weighted Solution: [m0 m1] = (X^T * W * X)^-1 * X^T * W * Y
 			for i in range(0, length):
 				xs[i,1]   = float(accepted_coord[i][0]) - float(accepted_coord[0][0]);
 				ys[i,0]   = float(accepted_coord[i][1]);
