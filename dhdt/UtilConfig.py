@@ -1,6 +1,6 @@
 # Class: ConfParams
 # used for dhdt
-# by Whyjay Zheng, Jul 21 2016
+# by Whyjay Zheng, Jul 27 2016
 
 import ConfigParser
 import csv
@@ -12,6 +12,8 @@ class ConfParams:
 		self.fpath = fpath
 		self.gdalwarp = {}
 		self.demlist = {}
+		self.regression = {}
+		self.output = {}
 
 	def ReadParam(self):
 		if self.fpath is not None:
@@ -23,6 +25,12 @@ class ConfParams:
 			gdalwarp_options = config.items("Gdalwarp Options")
 			for item in gdalwarp_options:
 				self.gdalwarp[item[0]] = item[1]
+			regression_options = config.items("Regression Options")
+			for item in regression_options:
+				self.regression[item[0]] = int(item[1])
+			output_options = config.items("Output Options")
+			for item in output_options:
+				self.output[item[0]] = item[1]
 		else:
 			print('Warning: No ini file is given. Nothing will run.')
 

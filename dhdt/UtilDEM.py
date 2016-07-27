@@ -5,9 +5,9 @@
 import sys
 import subprocess
 import gdal
+import numpy as np
 from datetime import datetime
 # or: from osgeo import gdal
-
 # we assume the fpath is the file with .tif or .TIF suffix.
 
 class SingleDEM:
@@ -24,6 +24,11 @@ class SingleDEM:
 	def GetGeoTransform(self):
 		ds = gdal.Open(self.fpath)
 		return ds.GetGeoTransform()
+
+	def GetNoDataValue(self, band=1):
+		ds = gdal.Open(self.fpath)
+		dsband = ds.GetRasterBand(band)
+		return dsband.GetNoDataValue()
 
 	def Unify(self, params):
 		print('Calling Gdalwarp...')
@@ -63,6 +68,9 @@ class SingleDEM:
 		out_raster.SetGeoTransform( refdem.GetGeoTransform() )
 		out_raster.SetProjection(   refdem.GetProjection()   )
 		# Write data to band 1 (becuase this is a brand new file)
+		# Of course, set nan to NoDataValue
+		array[np.isnan(array)] = refdem.GetNoDataValue()
+		out_raster.GetRasterBand(1).SetNoDataValue( refdem.GetNoDataValue() )
 		out_raster.GetRasterBand(1).WriteArray(array)
 		# Save to file
 		out_raster.FlushCache()

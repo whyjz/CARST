@@ -1,8 +1,15 @@
 # Class: 
 # used for dhdt
-# by Whyjay Zheng, Jul 21 2016
+# by Whyjay Zheng, Jul 27 2016
 
 import numpy as np
+from datetime import datetime
+
+'''
+def NodataValue2Nan(array, nodataval=-9999.0):
+	array[array == nodataval] = np.nan
+	return array
+'''
 
 class TimeSeriesDEM(np.ndarray):
 
@@ -26,7 +33,10 @@ class TimeSeriesDEM(np.ndarray):
 		"""
 
 		if dem is not None:
-			obj = np.asarray(dem.ReadAsArray()).view(cls)
+			# retrieve band 1 array, and then replace NoDataValue by np.nan
+			dem_array = dem.ReadAsArray()
+			dem_array[dem_array == dem.GetNoDataValue()] = np.nan
+			obj = np.asarray(dem_array).view(cls)
 			obj.date = [dem.date]
 			obj.uncertainty = [dem.uncertainty]
 		elif all([arg is not None for arg in [array, date, uncertainty]]):
@@ -65,18 +75,19 @@ class TimeSeriesDEM(np.ndarray):
 
 		self.date.append(dem.date)
 		self.uncertainty.append(dem.uncertainty)
-		# Add the first band
-		return TimeSeriesDEM(array=np.dstack([self, dem.ReadAsArray()]), date=self.date, uncertainty=self.uncertainty)
+		# Add the first band, and then replace NoDataValue by np.nan
+		dem_array = dem.ReadAsArray()
+		dem_array[dem_array == dem.GetNoDataValue()] = np.nan
+		return TimeSeriesDEM(array=np.dstack([self, dem_array]), date=self.date, uncertainty=self.uncertainty)
 
 	def Date2DayDelta(self):
-		t = np.array(self.date) - self.date[0]
+		t = np.array(self.date) - min(self.date)
 		self.daydelta = np.array([i.days for i in t])
 
 	def SetWeight(self):
 		self.weight = 1.0 / np.array(self.uncertainty) ** 2
 
-	#def Polyfit(self, x, w):
-	def Polyfit(self):
+	def Polyfit(self, min_count=5, min_time_span=365, min_year=2000, max_year=2016):
 
 		"""
 		Note that x and w are all 1-d array like, with the same length of the third dimension of the reg_array.
@@ -88,17 +99,33 @@ class TimeSeriesDEM(np.ndarray):
 		pixel_count = reg_size[0] * reg_size[1]
 
 		y = self.reshape(pixel_count, reg_size[2]).T
-		p, c = np.polyfit(self.daydelta, y, 1, w=np.sqrt(self.weight), cov=True)
-		#                                   The number 1 here means the first order, i.e. y = a0 + a1 * x
-		#                                   And the setting of w = np.sqrt(w) would minimize sigma(w * (y - y_hat) ^ 2)
-		# p would be pixel_count-by-2 matrix, and c would be 2-by-2-by-pixel_count matrix.
-		# p[0, :] is the slope
-		# p[1, :] is the intercept
-		# c[0, 0, k] is the slope variance for the k-th pixel
-		# c[1, 1, k] is the intercept variance for the k-th pixel
+		slope         = np.zeros(pixel_count)
+		slope_err     = np.zeros(pixel_count)
+		intercept     = np.zeros(pixel_count)
+		intercept_err = np.zeros(pixel_count)
+		for i in range(y.shape[1]):
+			px_y = y[:, i]
+			valid_idx = ~np.isnan(px_y)
+			# judge if a pixel is able to do regression using the given arguments
+			minlim_idx = np.array(self.date) > datetime(min_year, 1, 1)
+			maxlim_idx = np.array(self.date) < datetime(max_year, 1, 1)
+			valid_idx = valid_idx & minlim_idx & maxlim_idx
+			if sum(valid_idx) < min_count:
+				slope[i] = slope_err[i] = intercept[i] = intercept_err[i] = np.nan
+			elif max(self.daydelta[valid_idx]) - min(self.daydelta[valid_idx]) < min_time_span:
+				slope[i] = slope_err[i] = intercept[i] = intercept_err[i] = np.nan
+			# begin the polyfits
+			else:
+				px_y = px_y[valid_idx]
+				px_x = self.daydelta[valid_idx]
+				px_w = self.weight[valid_idx]
+				# print '----'
+				# print i, px_x, px_y, px_w
+				p, c = np.polyfit(px_x, px_y, 1, w=np.sqrt(px_w), cov=True)
+				# print c
+				slope[i]         = p[0]
+				slope_err[i]     = np.sqrt(c[0, 0])
+				intercept[i]     = p[1]
+				intercept_err[i] = np.sqrt(c[1, 1])
 
-		slope         = p[0, :].reshape(reg_size[:-1])
-		intercept     = p[1, :].reshape(reg_size[:-1])
-		slope_err     = np.sqrt(c[0, 0, :].reshape(reg_size[:-1]))
-		intercept_err = np.sqrt(c[1, 1, :].reshape(reg_size[:-1]))
-		return slope, intercept, slope_err, intercept_err
+		return slope.reshape(reg_size[:-1]), intercept.reshape(reg_size[:-1]), slope_err.reshape(reg_size[:-1]), intercept_err.reshape(reg_size[:-1])
