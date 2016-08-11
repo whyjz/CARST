@@ -30,12 +30,16 @@ for dem in demlist:
 
 dem_timeseries = TimeSeriesDEM(demlist[0])
 for i in range(1, len(demlist)):
+	print('Add DEM: ' + demlist[i].fpath)
 	dem_timeseries = dem_timeseries.AddDEM(demlist[i])
 
 # ==== Weighted regression ====
 
+print("Date2DayDelta...")
 dem_timeseries.Date2DayDelta()
+print("SetWeight...")
 dem_timeseries.SetWeight()
+print("Start Polyfit; pixel number = " + str(dem_timeseries.shape[0] * dem_timeseries.shape[1]))
 slope, intercept, slope_err, intercept_err = dem_timeseries.Polyfit(**ini.regression)
 
 # ==== Write to file ====

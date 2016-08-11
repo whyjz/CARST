@@ -4,6 +4,7 @@
 
 import sys
 import subprocess
+from subprocess import PIPE
 import gdal
 import numpy as np
 from datetime import datetime
@@ -31,8 +32,12 @@ class SingleDEM:
 		return dsband.GetNoDataValue()
 
 	def Unify(self, params):
+
+		""" Use gdalwarp to clip, reproject, and resample a DEM using a given set of params (which can 'unify' all DEMs). """
+
 		print('Calling Gdalwarp...')
-		newpath = self.fpath[:-4] + '_warped' + self.fpath[-4:]
+		fpath_warped = self.fpath[:-4] + '_warped' + self.fpath[-4:]
+		newpath = '/'.join([params['output_dir'], fpath_warped.split('/')[-1]])
 		gdalwarp_cmd = 'gdalwarp' +\
 		               ' -t_srs ' + params['t_srs'] +\
 		               ' -tr ' + params['tr'] +\
@@ -74,3 +79,26 @@ class SingleDEM:
 		out_raster.GetRasterBand(1).WriteArray(array)
 		# Save to file
 		out_raster.FlushCache()
+
+	def GetPointsFromXYZ(self, xyzfilename):
+
+		"""
+		Get points from a xyzfile, using grdtrack. Return the output .xyz file. 
+		Currently the output .xyz file is fixed as grdtrack_output.xyz
+		and will be overwritten by later commands.
+		"""
+
+		print('Calling Grdtrack...')
+		newpath = 'grdtrack_output.xyz'
+		grdtrack_cmd = 'grdtrack ' + xyzfilename +\
+		               ' -G' + self.fpath +\
+		               ' > ' + newpath
+		print(grdtrack_cmd)
+		retcode = subprocess.call(grdtrack_cmd, shell=True)
+		if retcode != 0:
+			print('Grdtrack failed. Please check if all the input parameters are properly set.')
+			sys.exit(retcode)
+		return newpath
+		
+
+

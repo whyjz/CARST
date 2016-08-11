@@ -104,6 +104,8 @@ class TimeSeriesDEM(np.ndarray):
 		intercept     = np.zeros(pixel_count)
 		intercept_err = np.zeros(pixel_count)
 		for i in range(y.shape[1]):
+			if i % 10000 == 0:
+				print("processing " + str(i) + " pixels out of " + str(y.shape[1]) + " pixels")
 			px_y = y[:, i]
 			valid_idx = ~np.isnan(px_y)
 			# judge if a pixel is able to do regression using the given arguments
@@ -119,10 +121,12 @@ class TimeSeriesDEM(np.ndarray):
 				px_y = px_y[valid_idx]
 				px_x = self.daydelta[valid_idx]
 				px_w = self.weight[valid_idx]
-				# print '----'
-				# print i, px_x, px_y, px_w
+				# This method minimizes sum(w * (y_i - y^hat_i) ^ 2)
+				#    Here we set w=np.sqrt(px_w) becuase np.polyfit minimizes sum( (w * (y_i - y^hat_i)) ^ 2) by default.
+				# Covariance is estimated from multivariate t-distribution.
+				# Comparing to the v0.1 version, this new method is slightly more conservative
+				#    because it considers the case of small d.o.f.
 				p, c = np.polyfit(px_x, px_y, 1, w=np.sqrt(px_w), cov=True)
-				# print c
 				slope[i]         = p[0]
 				slope_err[i]     = np.sqrt(c[0, 0])
 				intercept[i]     = p[1]
