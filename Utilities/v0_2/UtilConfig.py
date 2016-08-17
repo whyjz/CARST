@@ -2,10 +2,15 @@
 # used for dhdt
 # by Whyjay Zheng, Jul 28 2016
 
-import ConfigParser
+
+import sys
 import csv
 import os
 import numpy as np
+try:
+	import ConfigParser                    # python 2
+except:
+	import configparser as ConfigParser    # python 3
 from UtilDEM import SingleDEM
 
 class CsvTable:
@@ -13,6 +18,10 @@ class CsvTable:
 	def __init__(self, fpath=None, data=[]):
 		self.fpath = fpath
 		self.data = data
+		self.python_version = sys.version_info[0]      # detecting python 2 or 3, for csv module
+		self.read_pythonver_dict = {2: 'rb', 3: 'r'}
+		self.write_pythonver_dict = {2: 'wb', 3: 'w'}
+
 
 	def GetDEM(self):
 
@@ -21,7 +30,7 @@ class CsvTable:
 		"""
 
 		dems = []
-		with open(self.fpath, 'r') as csvfile:
+		with open(self.fpath, self.read_pythonver_dict[self.python_version]) as csvfile:
 			csvcontent = csv.reader(csvfile, skipinitialspace=True)
 			next(csvcontent, None)    # Skip the header
 			for row in csvcontent:
@@ -51,7 +60,7 @@ class CsvTable:
 		if self.data:
 			header = ['filename', 'date', 'uncertainty', 'mean_offset_wrt_refpts', \
 			          'trimmed_N', 'trimming_lb', 'trimming_up', 'refpts_file']
-			with open(self.fpath, 'wb') as csvfile:
+			with open(self.fpath, self.write_pythonver_dict[self.python_version]) as csvfile:
 				csvwriter = csv.writer(csvfile, delimiter=',')
 				csvwriter.writerow(header)
 				for row in self.data:
@@ -65,7 +74,7 @@ class ConfParams:
 		self.gdalwarp = {}
 		self.demlist = {}
 		self.regression = {}
-		self.output = {}
+		self.result = {}
 
 	def ReadParam(self):
 		if self.fpath is not None:
@@ -80,8 +89,8 @@ class ConfParams:
 				os.makedirs(self.gdalwarp['output_dir'])
 			for item in config.items("Regression Options"):
 				self.regression[item[0]] = int(item[1])
-			for item in config.items("Output Options"):
-				self.output[item[0]] = item[1]
+			for item in config.items("DHDT Result Options"):
+				self.result[item[0]] = item[1]
 		else:
 			print('Warning: No ini file is given. Nothing will run.')
 

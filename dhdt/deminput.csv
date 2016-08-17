@@ -1,6 +1,6 @@
-filename, date, uncertainty
-Demo_DEMs/HookerFJL_11AUG16WV01DEM1.tif, 2011-08-16, 0.579438
-Demo_DEMs/HookerFJL_12JUL20WV01DEM2.tif, 2012-07-20, 0.647260
-Demo_DEMs/HookerFJL_13APR18WV01DEM1.tif, 2013-04-18, 0.570123
-Demo_DEMs/HookerFJL_13APR19WV01DEM3.tif, 2013-04-19, 0.551240
-Demo_DEMs/HookerFJL_14APR02WV02DEM1.tif, 2014-04-02, 0.509941
+filename,date,uncertainty,mean_offset_wrt_refpts,trimmed_N,trimming_lb,trimming_up,refpts_file
+Demo_DEMs/HookerFJL_11AUG16WV01DEM1_warped.tif,2011-08-16,0.52861762400709045,0.075201526133333294,45,-1.2619869954841216,1.4929409274841556,/data/whyj/Projects/Franz_Josef_Land/Source/Shapefile_ICESAT_classification/Output_and_statistics/ICESAT_FJL_UTM40_BR_SP_SS_RemovedOutlier.txt
+Demo_DEMs/HookerFJL_12JUL20WV01DEM2_warped.tif,2012-07-20,0.5160197462822016,0.059134695772727432,44,-1.1925183791139151,1.3569279171138877,/data/whyj/Projects/Franz_Josef_Land/Source/Shapefile_ICESAT_classification/Output_and_statistics/ICESAT_FJL_UTM40_BR_SP_SS_RemovedOutlier.txt
+Demo_DEMs/HookerFJL_13APR18WV01DEM1_warped.tif,2013-04-18,0.4769330423761905,-0.08237691663636261,44,-1.3480670286640348,1.1240893366640294,/data/whyj/Projects/Franz_Josef_Land/Source/Shapefile_ICESAT_classification/Output_and_statistics/ICESAT_FJL_UTM40_BR_SP_SS_RemovedOutlier.txt
+Demo_DEMs/HookerFJL_13APR19WV01DEM3_warped.tif,2013-04-19,0.36939946183370259,0.024854793238097677,42,-1.1623675711599972,1.2339993971599839,/data/whyj/Projects/Franz_Josef_Land/Source/Shapefile_ICESAT_classification/Output_and_statistics/ICESAT_FJL_UTM40_BR_SP_SS_RemovedOutlier.txt
+Demo_DEMs/HookerFJL_14APR02WV02DEM1_warped.tif,2014-04-02,0.39504521927629249,-0.01848074236585262,41,-1.24594140254696,1.1591778235469534,/data/whyj/Projects/Franz_Josef_Land/Source/Shapefile_ICESAT_classification/Output_and_statistics/ICESAT_FJL_UTM40_BR_SP_SS_RemovedOutlier.txt

@@ -1,14 +1,16 @@
 #print(dem.fpath)# Class: singleDEM
 # used for dhdt
 # by Whyjay Zheng, Jul 27 2016
+# last edit: Aug 17 2016
 
-import ConfigParser
 # for Python 3, this should be changed to "configparser"
 import numpy as np
+import sys
+import os
+sys.path.insert(0, os.path.abspath('../Utilities/v0_2'))
 from UtilDEM import SingleDEM
 from UtilConfig import ConfParams
 from UtilFit import TimeSeriesDEM
-import sys
 
 if len(sys.argv) < 2:
 	print('Error: Usage: dhdt.py config_file')
@@ -44,5 +46,7 @@ slope, intercept, slope_err, intercept_err = dem_timeseries.Polyfit(**ini.regres
 
 # ==== Write to file ====
 
-outdem = SingleDEM(ini.output['gtiff_slope'])
-outdem.Array2Raster(slope, demlist[0])
+dhdt_dem     = SingleDEM('/'.join([ini.result['output_dir'], ini.result['gtiff_slope']]))
+dhdt_dem.Array2Raster(slope, demlist[0])
+dhdt_err_dem = SingleDEM('/'.join([ini.result['output_dir'], ini.result['gtiff_slope_err']]))
+dhdt_err_dem.Array2Raster(slope_err, demlist[0])

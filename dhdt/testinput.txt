@@ -1,5 +1,0 @@
-Demo_DEMs/HookerFJL_11AUG16WV01DEM1_warped.tif
-Demo_DEMs/HookerFJL_12JUL20WV01DEM2_warped.tif
-Demo_DEMs/HookerFJL_13APR18WV01DEM1_warped.tif
-Demo_DEMs/HookerFJL_13APR19WV01DEM3_warped.tif
-Demo_DEMs/HookerFJL_14APR02WV02DEM1_warped.tif

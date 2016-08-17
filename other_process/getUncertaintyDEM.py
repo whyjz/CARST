@@ -11,10 +11,17 @@
 #        getUncertaintyDEM.py PointFile -b DEMfiles outputcsv
 #                                             ^ a text file with path to a GTiff file at each row
 #
+# example:
+#            python getUncertaintyDEM.py getUncertaintyDEM_files/pointfile_input.xyz \
+#                -b getUncertaintyDEM_files/DEM_list.txt getUncertaintyDEM_files/output.csv
+#
+#
 # DEMfile: GeoTiff format
 # PointFile: GMT .xyz format
 
 import sys
+import os
+sys.path.insert(0, os.path.abspath('../Utilities/v0_2'))
 from UtilDEM import SingleDEM
 from UtilXYZ import XYZFile
 from UtilConfig import CsvTable
@@ -24,7 +31,7 @@ def getUncertaintyDEM(demfpath, pointfilepath):
 	xyzfile_output = dem.GetPointsFromXYZ(pointfilepath)
 	xyz = XYZFile(xyzfile_output, pointfilepath, demfpath)
 	xyz.Read()
-	return xyz.StatisticOutput()
+	return xyz.StatisticOutput(demfpath.replace('.tif', '_offset.png'))
 
 if len(sys.argv) < 4:
 	print('Error: Usage: getUncertaintyDEM.py PointFile DEMfile outputcsv')

@@ -5,10 +5,12 @@
 import sys
 import subprocess
 from subprocess import PIPE
-import gdal
 import numpy as np
 from datetime import datetime
-# or: from osgeo import gdal
+try:
+	import gdal
+except:
+	from osgeo import gdal        # sometimes gdal is part of osgeo modules
 # we assume the fpath is the file with .tif or .TIF suffix.
 
 class SingleDEM:
@@ -89,7 +91,7 @@ class SingleDEM:
 		"""
 
 		print('Calling Grdtrack...')
-		newpath = 'grdtrack_output.xyz'
+		newpath = 'log_getUncertaintyDEM_grdtrack_output.xyz'
 		grdtrack_cmd = 'grdtrack ' + xyzfilename +\
 		               ' -G' + self.fpath +\
 		               ' > ' + newpath
