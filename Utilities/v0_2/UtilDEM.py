@@ -1,6 +1,7 @@
 # Class: singleDEM
 # used for dhdt
 # by Whyjay Zheng, Jul 20 2016
+# last edit: Aug 17 2016
 
 import sys
 import subprocess
@@ -14,6 +15,10 @@ except:
 # we assume the fpath is the file with .tif or .TIF suffix.
 
 class SingleDEM:
+
+	"""
+	DEM object. Provide operations like "Unify" (gdalwarp) and "GetPointsFromXYZ" (grdtrack).
+	"""
 
 	def __init__(self, fpath, date=None, uncertainty=None):
 		self.fpath = fpath
@@ -86,7 +91,7 @@ class SingleDEM:
 
 		"""
 		Get points from a xyzfile, using grdtrack. Return the output .xyz file. 
-		Currently the output .xyz file is fixed as grdtrack_output.xyz
+		Currently the output .xyz file is fixed as 'log_getUncertaintyDEM_grdtrack_output.xyz'
 		and will be overwritten by later commands.
 		"""
 

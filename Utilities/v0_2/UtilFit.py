@@ -1,17 +1,17 @@
-# Class: 
+# Class: TimeSeriesDEM(np.ndarray)
 # used for dhdt
 # by Whyjay Zheng, Jul 27 2016
+# last edit: Aug 17 2016
 
 import numpy as np
 from datetime import datetime
 
-'''
-def NodataValue2Nan(array, nodataval=-9999.0):
-	array[array == nodataval] = np.nan
-	return array
-'''
-
 class TimeSeriesDEM(np.ndarray):
+
+	"""
+	This class can include many DEMs (in UtilDEM.SingleDEM object) and then create a 3-D matrix.
+	each DEM is aligned along z-axis so that TimeSeriesDEM[m, n, :] would be the time series at pixel (m, n).
+	"""
 
 	def __new__(cls, dem=None, array=None, date=None, uncertainty=None):
 
@@ -59,12 +59,6 @@ class TimeSeriesDEM(np.ndarray):
 		self.daydelta = getattr(obj, 'daydelta', None)
 		self.weight = getattr(obj, 'weight', None)
 
-	'''
-	def __array_wrap__(self, out_arr, context=None):
-
-		""" See TimeSeriesDEM.__new__ for comments """
-		return np.ndarray.__array_wrap__(self, out_arr, context)
-	'''
 
 	def AddDEM(self, dem):
 
@@ -81,10 +75,20 @@ class TimeSeriesDEM(np.ndarray):
 		return TimeSeriesDEM(array=np.dstack([self, dem_array]), date=self.date, uncertainty=self.uncertainty)
 
 	def Date2DayDelta(self):
+
+		"""
+		Make self.daydelta from [self.date - min(self.date)]
+		"""
+
 		t = np.array(self.date) - min(self.date)
 		self.daydelta = np.array([i.days for i in t])
 
 	def SetWeight(self):
+
+		"""
+		Weight is set to 1/sigma^2
+		"""
+
 		self.weight = 1.0 / np.array(self.uncertainty) ** 2
 
 	def Polyfit(self, min_count=5, min_time_span=365, min_year=2000, max_year=2016):

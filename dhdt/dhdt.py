@@ -1,13 +1,22 @@
-#print(dem.fpath)# Class: singleDEM
-# used for dhdt
+#!/usr/bin/env python
+#
+# Main dh/dt script
 # by Whyjay Zheng, Jul 27 2016
 # last edit: Aug 17 2016
+#
+# usage: python dhdt.py config_file
+#
+# try: 
+#    python dhdt.py defaults.ini 
+# for testing session.
+#
+# complete readme is at CARST/Doc/dhdt/README.rst
 
-# for Python 3, this should be changed to "configparser"
+
 import numpy as np
 import sys
 import os
-sys.path.insert(0, os.path.abspath('../Utilities/v0_2'))
+sys.path.insert(0, os.path.abspath('../Utilities/v0_2'))        # for all modules
 from UtilDEM import SingleDEM
 from UtilConfig import ConfParams
 from UtilFit import TimeSeriesDEM
@@ -37,9 +46,7 @@ for i in range(1, len(demlist)):
 
 # ==== Weighted regression ====
 
-print("Date2DayDelta...")
 dem_timeseries.Date2DayDelta()
-print("SetWeight...")
 dem_timeseries.SetWeight()
 print("Start Polyfit; pixel number = " + str(dem_timeseries.shape[0] * dem_timeseries.shape[1]))
 slope, intercept, slope_err, intercept_err = dem_timeseries.Polyfit(**ini.regression)
