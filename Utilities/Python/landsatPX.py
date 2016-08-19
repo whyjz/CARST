@@ -2,7 +2,7 @@
 
 
 # landsatPX.py
-# Authors: Andrew K. Melkonian, William J. Durkin, Whyjay Zen
+# Authors: Andrew K. Melkonian, William J. Durkin, Whyjay Zheng
 # All rights reserved
 
 
@@ -245,9 +245,7 @@ NODE_LIST       = /home/user/Landsat8/Pairs/nodelist.txt
 
 
 import sys
-
-# now this script is still at Utilities, so we don't need to add any path since all modules are put together with it.
-# sys.path.insert(0, os.path.abspath('../Utilities/v0_2'))        # for all modules
+# sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
 
 import os
 import re
@@ -312,6 +310,8 @@ def landsatPX(params_path):
     try:
         infile = open(params_path,"r");
 
+
+        # Read config files. Ready to be replaced by UtilConfig.
         while 1:
             line = infile.readline();
 
@@ -336,36 +336,37 @@ def landsatPX(params_path):
             # locals()[name] = value
 
         infile.close();
+        
 
         # for test, all the parameters are given here.
         # ========================================================
-        UTM_ZONE        = '5'
-        UTM_LETTER      = 'V'
-        BAND            = 'B8' 
-        ICE             = './OUTLINES/StEliasMtn_utm7v_ice.gmt' 
-        ROCK            = './OUTLINES/StEliasMtn_utm7v_rock.gmt' 
-        IMAGE_DIR       = './IMAGES'
-        METADATA_DIR    = './IMAGES'
-        PAIRS_DIR       = '.'
-        PROCESSORS      = '16'
-        RESOLUTION      = '15'
-        SATELLITE       = 'Landsat8'
-        SNR_CUTOFF      = '0'
-        DEM             = './DEM/yahtse_srtm_dem.tif'
-        PREFILTER       = 'False'
-        REF_X           = '32'
-        REF_Y           = '32'
-        SEARCH_X        = '32'
-        SEARCH_Y        = '32'
-        STEP            = '8'
-        M_SCRIPTS_DIR   = '../../Utilities/Matlab/velocity_postfilter'
-        VEL_MAX         = '28'
-        TOL             = '0.3'
-        NUMDIF          = '3'
-        SCALE           = '1500000'
-        PAIRS           = './landsat8_2016_200_216.txt'
-        GNU_PARALLEL    = 'False'
-        NODE_LIST       = 'None'
+        # UTM_ZONE        = '5'
+        # UTM_LETTER      = 'V'
+        # BAND            = 'B8' 
+        # ICE             = './Landsat8_example/OUTLINES/StEliasMtn_utm7v_ice.gmt' 
+        # ROCK            = './Landsat8_example/OUTLINES/StEliasMtn_utm7v_rock.gmt' 
+        # IMAGE_DIR       = './Landsat8_example/IMAGES'
+        # METADATA_DIR    = './Landsat8_example/IMAGES'
+        # PAIRS_DIR       = '.'
+        # PROCESSORS      = '16'
+        # RESOLUTION      = '15'
+        # SATELLITE       = 'Landsat8'
+        # SNR_CUTOFF      = '0'
+        # DEM             = './Landsat8_example/DEM/yahtse_srtm_dem.tif'
+        # PREFILTER       = 'False'
+        # REF_X           = '32'
+        # REF_Y           = '32'
+        # SEARCH_X        = '32'
+        # SEARCH_Y        = '32'
+        # STEP            = '8'
+        # M_SCRIPTS_DIR   = '../../Utilities/Matlab/velocity_postfilter'
+        # VEL_MAX         = '28'
+        # TOL             = '0.3'
+        # NUMDIF          = '3'
+        # SCALE           = '1500000'
+        # PAIRS           = './Landsat8_example/landsat8_2016_200_216.txt'
+        # GNU_PARALLEL    = 'False'
+        # NODE_LIST       = 'None'
         # ========================================================
 
         # print(PAIRS_DIR)
