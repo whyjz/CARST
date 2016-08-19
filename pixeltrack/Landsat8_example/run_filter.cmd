@@ -4,7 +4,7 @@
 # Please use the same parameter file that was used for running the pixel-tracking script
 # e.g., bash run_filter.cmd params.txt
 
-export CARST_DIR=/data/wjd73/CARST
+export CARST_DIR="../.."
 
 params_file=$1
 
@@ -23,8 +23,8 @@ do
   echo $U $V
   pwd
   echo "addpath('$CARST_DIR/Utilities/Matlab'); noiseremoval($VEL_MAX, $TOL, $NUMDIF, '$U', '$V')"
-  matlab -r -nodisplay -nojvm "addpath('$CARST_DIR/Utilities/Matlab'); noiseremoval($VEL_MAX, $TOL, $NUMDIF, '$U', '$V');"
- 
+  matlab -nojvm -r "addpath('/data/whyj/Projects/Github/CARST/Utilities/Matlab/velocity_postfilter'); noiseremoval($VEL_MAX, $TOL, $NUMDIF, '$U', '$V'); exit"
+  # matlab -nojvm -r"addpath('../../Utilities/Matlab'); disp('yeah'); exit"
   cd ..    
 done
     

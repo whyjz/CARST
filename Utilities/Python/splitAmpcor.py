@@ -54,7 +54,7 @@ def splitAmpcor(ref_path, search_path, pair_dir, nproc, resolution, ref_x, ref_y
 
 	infile.close();
 
-	from findOffset import *;
+	from findOffset import findOffset;
 	
 	output = findOffset(ref_hdr, search_hdr, resolution);
 	
