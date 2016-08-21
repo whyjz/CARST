@@ -65,6 +65,8 @@ class CsvTable:
 			header = ['filename', 'date', 'uncertainty', 'mean_offset_wrt_refpts', \
 			          'trimmed_N', 'trimming_lb', 'trimming_up', 'refpts_file']
 			with open(self.fpath, self.write_pythonver_dict[self.python_version]) as csvfile:
+				# python 3 should be open(fname, 'w', newline='') and we didn't add argument "newline" here. 
+				# I don't know if it would cause some issues or not?
 				csvwriter = csv.writer(csvfile, delimiter=',')
 				csvwriter.writerow(header)
 				for row in self.data:

@@ -361,10 +361,11 @@ try:
         else:
             print("***** \"" + pair_path + "/ampcor_" + ampcor_label + "_1.in\" already exists, assuming \"ampcor\" input files already made...\n");
 
-        # This is for pre-running case:
+        # [Part 1] This is for pre-running case: if there's no xxxxxxx_1.off, the program will run run_amp.cmd and exits
         if not os.path.exists(pair_path + "/ampcor_" + ampcor_label + "_1.off"):
 
             
+            # write something to run_amp.cmd
             amp_file = open(pair_path+"/run_amp.cmd", 'w')
             amps_complete = open(pair_path+"/amps_complete.txt", 'w')
             amps_complete.close()
@@ -386,6 +387,8 @@ try:
                     cmd += '''\nawk '{$NF=""; print $0}' run_amp.cmd | parallel --sshloginfile ''' + NODE_LIST + ''' --workdir $PWD\n''';
                 cmd += "cd ../\n";
                 subprocess.call(cmd, shell=True);
+                print("After all ampcor processes have completed, please rerun the landsatPX.py script.\n")
+                return
 
             # If not using gnu parallel, this try block will gracefully exit the script and give instructions
             # the next step
@@ -399,10 +402,10 @@ try:
                 print("After all ampcor processes have completed, please rerun the landsatPX.py script.\n")
                 return
                    
-
-
+        # [Part 2] If the program detects xxxxxxx_1.off, it will think that ampcor has finished (by runnning run_amp.cmd).
         pair_done = True;
 
+        # ======== Check if all ampcor has finished =========
         with open(pair_path+"/amps_complete.txt") as ac:
             amps_comp_num = ac.readlines()
         
@@ -410,6 +413,7 @@ try:
             print("\n***** It looks like not all ampcor processes have completed.")
             print("     Skipping....")
             return
+        # ===================================================
 
         #for i in range(1, int(PROCESSORS) + 1):
 
@@ -438,6 +442,7 @@ try:
                
         print("\n***** Offset files in \"" + pair_path + "\" appear to have finished processing, composing results...\n");
 
+        # ==== cat all output to ampcor_label.off ====
         if os.path.exists(pair_path + "/ampcor_" + ampcor_label + ".off"):
             print("\n***** \"" + pair_path + "/ampcor_" + ampcor_label + ".off\" already exists, assuming it contains all offsets for this run...\n");
 
@@ -452,7 +457,9 @@ try:
 
             cat_cmd += "> " + pair_path + "/ampcor_" + ampcor_label + ".off\n";
             subprocess.call(cat_cmd, shell=True);
+        # ============================================
 
+        # get ref samples and lines number 
         ref_samples = "";
         ref_lines   = "";
 
@@ -467,6 +474,8 @@ try:
                 ref_lines = line.split("=")[1].strip();
 
         infile.close();
+        # ref_samples = '1698'
+        # ref_lines = '1087'
 
         east_name      = pair_label + "_" + ampcor_label + "_eastxyz";
         north_name     = pair_label + "_" + ampcor_label + "_northxyz";
@@ -477,6 +486,9 @@ try:
         if not os.path.exists(east_xyz_path):
             print("\n***** \"getxyzs.py\" running to create E-W and N-S ASCII files with offsets (in m) in the third column and SNR in the 4th column\n \
                ***** NOTE: E-W MAY BE FLIPPED DEPENDING ON HEMISPHERE, PLEASE CHECK MANUALLY...\n");
+            # This will generate a lot of warnings when using python 3...
+            # anyway, it's generating 20160803203709_20160718203706_r32x32_s32x32_eastxyz.txt
+            #                     and 20160803203709_20160718203706_r32x32_s32x32_northxyz.txt
             getxyzs(pair_path, ampcor_label, STEP, STEP, "1", RESOLUTION, ref_samples, ref_lines, ul_x, ul_y, pair_label);
 
         else:
@@ -488,6 +500,7 @@ try:
         snr_grd_path   = pair_path + "/" + north_name.replace("north", "snr") + ".grd";
 
         R = "-R" + ul_x + "/" + lr_y + "/" + lr_x + "/" + ul_y + "r";
+        # R = '-R465067.5/6665272.5/490537.5/6681577.5r'
 
         if not os.path.exists(east_grd_path):
             print("\n***** Creating \"" + east_grd_path + "\" and \"" + north_grd_path + "\" using \"xyz2grd\"...\n");
@@ -496,6 +509,9 @@ try:
             later_datetime = datetime.datetime(int(later_date[0:4]), int(later_date[4:6]), int(later_date[6:8]), \
                                int(later_date[8:10]), int(later_date[10:12]), int(later_date[12:14]));
             day_interval   = str((later_datetime - early_datetime).total_seconds() / (60. * 60. * 24.));
+            # early_datetime = datetime.datetime(2016, 7, 18, 20, 37, 6)
+            # later_datetime = datetime.datetime(2016, 8, 3, 20, 37, 9)
+            # day_interval = '16.00003472222222'
             cmd  = "\nxyz2grd " + east_xyz_path + " " + R + " -G" + east_grd_path + " -I" + str(int(STEP) * int(RESOLUTION)) + "=\n";
             cmd += "\nxyz2grd " + north_xyz_path + " " + R + " -G" + north_grd_path + " -I" + str(int(STEP) * int(RESOLUTION)) + "=\n";
             cmd += "\ngawk '{print $1\" \"$2\" \"$4}' " + north_xyz_path + " | xyz2grd " + R + " \
@@ -504,6 +520,10 @@ try:
             cmd += "\ngrdmath " + north_grd_path + " " + day_interval + " DIV --IO_NC4_CHUNK_SIZE=c = " + north_grd_path + "\n";
             cmd += "\ngrdmath " + north_grd_path + " " + east_grd_path + " HYPOT --IO_NC4_CHUNK_SIZE=c = " + mag_grd_path + "\n";
             subprocess.call(cmd, shell=True);
+            # please note that xxxxx_snrxyz.grd only counts the error from fitting a cross-correlation peak.
+            # it does not include the offset between ref image and search image, which is also can be a significant source of errors.
+            #
+            # The unit in mag, north, east is pixel/day.
 
         else:
             print("\n***** \"" + east_grd_path + "\" already exists, assuming m/day velocity grids already made for this run...\n"); 
@@ -512,6 +532,7 @@ try:
     return;
 
 except IOError:
+	# this is caused when run_cmd has a bad path issue. will fix in the future update.
     message  = "     Please run ampcors by excecuting the following commands:\n\n"
     message += "     cd " + pair_path + "\n"
     message += "     bash run_amp.cmd\n\n"
