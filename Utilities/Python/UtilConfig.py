@@ -81,33 +81,48 @@ class ConfParams:
 
 	def __init__(self, fpath=None):
 		self.fpath = fpath
-		self.gdalwarp = {}
-		self.demlist = {}
-		self.regression = {}
-		self.result = {}
+		# self.gdalwarp = {}
+		# self.demlist = {}
+		# self.regression = {}
+		# self.result = {}
 
 	def ReadParam(self):
 
 		"""
 		Read parameters and save them as self.xxxx
+		example: if there is a section called [gdalwarp]
+		and there is an option named tr = 30 30
+		then self.gdalwarp['tr'] = '30 30'
 		"""
 
 		if self.fpath is not None:
 			config = ConfigParser.RawConfigParser()
 			config.read(self.fpath)
-			for item in config.items("DEM List"):
-				self.demlist[item[0]] = item[1]
-			for item in config.items("Gdalwarp Options"):
-				self.gdalwarp[item[0]] = item[1]
-			# create gdalwarp output folder
-			if not os.path.exists(self.gdalwarp['output_dir']):
-				os.makedirs(self.gdalwarp['output_dir'])
-			for item in config.items("Regression Options"):
-				self.regression[item[0]] = int(item[1])
-			for item in config.items("DHDT Result Options"):
-				self.result[item[0]] = item[1]
+
+			for section in config.sections():
+				section_contents = {}
+				for item in config.items(section):
+					section_contents[item[0]] = item[1]
+				setattr(self, section, section_contents)
+
+			self.VerifyParam()
+
 		else:
 			print('Warning: No ini file is given. Nothing will run.')
+
+	def VerifyParam(self):
+
+		"""
+		Verify params and modify them to proper types.
+		"""
+
+		if hasattr(self, 'regression'):
+			for key in self.regression:
+				self.regression[key] = int(self.regression[key])
+		if hasattr(self, 'gdalwarp'):
+			if not os.path.exists(self.gdalwarp['output_dir']):
+				os.makedirs(self.gdalwarp['output_dir'])    # create gdalwarp output folder
+
 
 	def GetDEM(self):
 

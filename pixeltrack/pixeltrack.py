@@ -3,17 +3,20 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
+# sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
+sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
 import re
 import subprocess
 # from UtilDEM import SingleDEM
 # from UtilConfig import ConfParams
 # from UtilFit import TimeSeriesDEM
 from splitAmpcor import splitAmpcor
+from getxyzs import getxyzs
+import datetime
 
 if len(sys.argv) < 2:
-	print('Error: Usage: pixeltrack.py config_file')
-	sys.exit(1)
+    print('Error: Usage: pixeltrack.py config_file')
+    sys.exit(1)
 
 params_path = sys.argv[1]
 
@@ -55,43 +58,71 @@ try:
 
     # for test, all the parameters are given here.
     # ========================================================
-	UTM_ZONE        = '5'
-	UTM_LETTER      = 'V'
-	BAND            = 'B8' 
-	ICE             = './Landsat8_example/OUTLINES/StEliasMtn_utm7v_ice.gmt' 
-	ROCK            = './Landsat8_example/OUTLINES/StEliasMtn_utm7v_rock.gmt' 
-	IMAGE_DIR       = './Landsat8_example/IMAGES'
-	METADATA_DIR    = './Landsat8_example/IMAGES'
-	PAIRS_DIR       = '.'
-	PROCESSORS      = '16'
-	RESOLUTION      = '15'
-	SATELLITE       = 'Landsat8'
-	SNR_CUTOFF      = '0'
-	DEM             = './Landsat8_example/DEM/yahtse_srtm_dem.tif'
-	PREFILTER       = 'False'
-	REF_X           = '32'
-	REF_Y           = '32'
-	SEARCH_X        = '32'
-	SEARCH_Y        = '32'
-	STEP            = '8'
-	M_SCRIPTS_DIR   = '../../Utilities/Matlab/velocity_postfilter'
-	VEL_MAX         = '28'
-	TOL             = '0.3'
-	NUMDIF          = '3'
-	SCALE           = '1500000'
-	PAIRS           = './Landsat8_example/landsat8_2016_200_216.txt'
-	GNU_PARALLEL    = 'False'
-	NODE_LIST       = 'None'
+    UTM_ZONE        = '5'
+    UTM_LETTER      = 'na'
+    BAND            = 'na' 
+    ICE             = 'na/na' 
+    ROCK            = 'na/na' 
+    IMAGE_DIR       = 'na/na'
+    METADATA_DIR    = './Landsat8_example/IMAGES'
+    PAIRS_DIR       = './Landsat8_example'
+    PROCESSORS      = '16'
+    RESOLUTION      = '15'
+    SATELLITE       = 'na'
+    SNR_CUTOFF      = 'na'
+    DEM             = 'na'
+    PREFILTER       = 'False'
+    REF_X           = '32'
+    REF_Y           = '32'
+    SEARCH_X        = '32'
+    SEARCH_Y        = '32'
+    STEP            = '8'
+    M_SCRIPTS_DIR   = 'na'
+    VEL_MAX         = 'na'
+    TOL             = 'na'
+    NUMDIF          = 'na'
+    SCALE           = 'na'
+    PAIRS           = './Landsat8_example/landsat8_2016_200_216.txt'
+    GNU_PARALLEL    = 'False'
+    NODE_LIST       = 'None'
+    # ========================================================
+    # UTM_ZONE        = '41'
+    # UTM_LETTER      = 'na'
+    # BAND            = 'na'
+    # ICE             = 'na/na'
+    # ROCK            = 'na/na'
+    # IMAGE_DIR       = 'na/na'
+    # METADATA_DIR    = '.'
+    # PAIRS_DIR       = '.'
+    # PROCESSORS      = '16'
+    # RESOLUTION      = '15'
+    # SATELLITE       = 'na'
+    # SNR_CUTOFF      = 'na'
+    # DEM             = 'na'
+    # PREFILTER       = 'False'
+    # REF_X           = '32'
+    # REF_Y           = '32'
+    # SEARCH_X        = '8'
+    # SEARCH_Y        = '8'
+    # STEP            = '4'
+    # M_SCRIPTS_DIR   = 'na'
+    # VEL_MAX         = 'na'
+    # TOL             = 'na'
+    # NUMDIF          = 'na'
+    # SCALE           = 'na'
+    # PAIRS           = './pairs.txt'
+    # GNU_PARALLEL    = 'False'
+    # NODE_LIST       = 'None'
     # ========================================================
 
     # ======== Check if PAIRS_DIR, METADATA_DIR, and PAIRS exist ========
     if not os.path.exists(PAIRS_DIR):
         print("\n***** ERROR: Pair directory specified (\"" + PAIRS_DIR + "\") not found, make sure full path is provided, exiting...\n");
-        return;
+        sys.exit(1)
 
     if not os.path.exists(METADATA_DIR):
         print("\n***** ERROR: Metadata directory specified (\"" + METADATA_DIR + "\") not found, make sure full path is provided, exiting...\n");
-        return;
+        sys.exit(1)
 
     if not os.path.exists(PAIRS):
         print("\n***** ERROR: Pair list \"" + PAIRS + "\" not found, make sure full path is provided, exiting...\n");
@@ -125,7 +156,7 @@ try:
 
     if len(pairs_hash) == 0:
         print("\n***** ERROR: No valid pairs found,  make sure correct paths were provided in \"" + PAIRS + "\", exiting...\n");
-        return;
+        sys.exit(1)
     # =================================
 
 
@@ -227,8 +258,6 @@ try:
         # =========== make working folder and symlinks ==========
         if not os.path.exists(pair_path):
             os.mkdir(pair_path);
-
-        print(pair_path);
 
         if not os.path.exists(image1_link_path):
             os.symlink(image1_path, image1_link_path);
@@ -370,7 +399,8 @@ try:
             amps_complete = open(pair_path+"/amps_complete.txt", 'w')
             amps_complete.close()
             for i in range(1, int(PROCESSORS) + 1):
-                amp_file.write("(ampcor " + pair_path + "/ampcor_" + ampcor_label + "_" + str(i) + ".in rdf > " + pair_path + "/ampcor_" + ampcor_label + "_" + str(i) + ".out; echo " + str(i) + " >> amps_complete.txt) &\n")
+                # there used to be a path issue and now fixed - WJ
+                amp_file.write("(ampcor " + "ampcor_" + ampcor_label + "_" + str(i) + ".in rdf > " + "ampcor_" + ampcor_label + "_" + str(i) + ".out; echo " + str(i) + " >> amps_complete.txt) &\n")
             amp_file.close()        
 
 
@@ -388,7 +418,7 @@ try:
                 cmd += "cd ../\n";
                 subprocess.call(cmd, shell=True);
                 print("After all ampcor processes have completed, please rerun the landsatPX.py script.\n")
-                return
+                sys.exit(0)
 
             # If not using gnu parallel, this try block will gracefully exit the script and give instructions
             # the next step
@@ -400,7 +430,7 @@ try:
 
                 print("\n\"ampcor\" running as " + PROCESSORS + " separate processes, this step may take several hours to complete...\n");
                 print("After all ampcor processes have completed, please rerun the landsatPX.py script.\n")
-                return
+                sys.exit(0)
                    
         # [Part 2] If the program detects xxxxxxx_1.off, it will think that ampcor has finished (by runnning run_amp.cmd).
         pair_done = True;
@@ -412,7 +442,7 @@ try:
         if len(amps_comp_num) < int(PROCESSORS):
             print("\n***** It looks like not all ampcor processes have completed.")
             print("     Skipping....")
-            return
+            sys.exit(1)
         # ===================================================
 
         #for i in range(1, int(PROCESSORS) + 1):
@@ -529,10 +559,10 @@ try:
             print("\n***** \"" + east_grd_path + "\" already exists, assuming m/day velocity grids already made for this run...\n"); 
                                
                
-    return;
+    sys.exit(0)
 
 except IOError:
-	# this is caused when run_cmd has a bad path issue. will fix in the future update.
+    # this is caused when run_cmd has a bad path issue. will fix in the future update.
     message  = "     Please run ampcors by excecuting the following commands:\n\n"
     message += "     cd " + pair_path + "\n"
     message += "     bash run_amp.cmd\n\n"

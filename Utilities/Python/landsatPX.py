@@ -331,9 +331,7 @@ def landsatPX(params_path):
 
             name = elements[0].strip();
             value = elements[1].strip();
-            # print(name, value)
             vars()[name] = value;
-            # locals()[name] = value
 
         infile.close();
         
@@ -370,9 +368,9 @@ def landsatPX(params_path):
         # ========================================================
 
         # print(PAIRS_DIR)
-        if not os.path.exists(PAIRS_DIR):
-            print("\n***** ERROR: Pair directory specified (\"" + PAIRS_DIR + "\") not found, make sure full path is provided, exiting...\n");
-            return;
+        # if not os.path.exists(PAIRS_DIR):
+        #     print("\n***** ERROR: Pair directory specified (\"" + PAIRS_DIR + "\") not found, make sure full path is provided, exiting...\n");
+        #     return;
 
         if not os.path.exists(METADATA_DIR):
             print("\n***** ERROR: Metadata directory specified (\"" + METADATA_DIR + "\") not found, make sure full path is provided, exiting...\n");

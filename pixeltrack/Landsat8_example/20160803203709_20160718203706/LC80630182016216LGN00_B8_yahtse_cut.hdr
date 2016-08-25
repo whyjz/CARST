@@ -1,6 +1,6 @@
 ENVI
 description = {
-./20160803203709_20160718203706/LC80630182016216LGN00_B8_yahtse_cut.img}
+./Landsat8_example/IMAGES/20160803203709_20160718203706/LC80630182016216LGN00_B8_yahtse_cut.img}
 samples = 1876
 lines   = 1384
 bands   = 1
