@@ -16,7 +16,8 @@
 import numpy as np
 import sys
 import os
-sys.path.insert(0, os.path.abspath('../Utilities/v0_2'))        # for all modules
+# sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
+sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
 from UtilDEM import SingleDEM
 from UtilConfig import ConfParams
 from UtilFit import TimeSeriesDEM

@@ -2,6 +2,7 @@
 
 # splitAmpcor.py
 # Author: Andrew Kenneth Melkonian
+# last edit: Aug 21, 2016
 
 import os;
 import subprocess;
@@ -10,6 +11,7 @@ import sys;
 
 def splitAmpcor(ref_path, search_path, pair_dir, nproc, resolution, ref_x, ref_y, search_x, search_y, step):
 
+	# ==== find .hdr files ====
 	ref_hdr     = ref_path + ".hdr";
 
 	if not os.path.exists(ref_hdr):
@@ -20,6 +22,7 @@ def splitAmpcor(ref_path, search_path, pair_dir, nproc, resolution, ref_x, ref_y
 	if not os.path.exists(search_hdr):
 		search_hdr = search_path[ : search_path.rfind(".")] + ".hdr";
 
+	# ==== find samples and lines number ====
 	ref_samples = "";
 	ref_lines   = "";
 	
@@ -54,7 +57,7 @@ def splitAmpcor(ref_path, search_path, pair_dir, nproc, resolution, ref_x, ref_y
 
 	infile.close();
 
-	from findOffset import *;
+	from findOffset import findOffset;
 	
 	output = findOffset(ref_hdr, search_hdr, resolution);
 	
@@ -65,15 +68,16 @@ def splitAmpcor(ref_path, search_path, pair_dir, nproc, resolution, ref_x, ref_y
 	
 	for i in range(1,int(nproc)+1):
 
-		lines_proc = int(ref_lines) / int(nproc) / int(ref_y) * int(ref_y);
+		lines_proc = int(ref_lines) // int(nproc) // int(ref_y) * int(ref_y);
 	
 		yoffset = 0;
 
 		if int(mean_y) < 0:
 			yoffset = -1 * int(mean_y);
 	
+		# print(yoffset, type(yoffset))
 		firstline = str((i - 1) * lines_proc + 1 + yoffset);
-		lastline  = str(int(firstline) + lines_proc - 1);
+		lastline  = str(int(firstline) + lines_proc - 1);     # WhyJ
 
 		if i == int(nproc):
 
