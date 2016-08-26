@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilitie
 import re
 import subprocess
 # from UtilDEM import SingleDEM
-# from UtilConfig import ConfParams
+from UtilConfig import ConfParams
 # from UtilFit import TimeSeriesDEM
 from splitAmpcor import splitAmpcor
 from getxyzs import getxyzs
@@ -18,82 +18,31 @@ if len(sys.argv) < 2:
     print('Error: Usage: pixeltrack.py config_file')
     sys.exit(1)
 
-params_path = sys.argv[1]
+# ==== Read ini file ====
 
+inipath = sys.argv[1]
+ini = ConfParams(inipath)
+ini.ReadParam()
+ini.VerifyParam()
+imgpairlist = ini.GetImgPair(delimiter=' ')
+
+print(imgpairlist)
+
+
+"""
 try:
 
 
-    # Read config files. Ready to be replaced by UtilConfig.
-    # =====================
-    '''
-    infile = open(params_path,"r");
-
-    while 1:
-        line = infile.readline();
-
-        if not line:
-            break;
-
-        line = line.strip();
-
-        name = "";
-        value = "";
-        elements = line.split("=");
-
-
-        if len(elements) < 2 or len(elements[0]) < 1 or len(elements[1]) < 1:
-            print("\n***** ERROR, parameter file line format is \"name = value\", \"" + line + "\" does not conform to this format\n");
-            sys.exit();
-
-        name = elements[0].strip();
-        value = elements[1].strip();
-        # print(name, value)
-        vars()[name] = value;
-        # locals()[name] = value
-
-    infile.close();
-    '''
-    # ======================
-    
-
     # for test, all the parameters are given here.
     # ========================================================
-    UTM_ZONE        = '5'
-    UTM_LETTER      = 'na'
-    BAND            = 'na' 
-    ICE             = 'na/na' 
-    ROCK            = 'na/na' 
-    IMAGE_DIR       = 'na/na'
-    METADATA_DIR    = './Landsat8_example/IMAGES'
-    PAIRS_DIR       = './Landsat8_example'
-    PROCESSORS      = '16'
-    RESOLUTION      = '15'
-    SATELLITE       = 'na'
-    SNR_CUTOFF      = 'na'
-    DEM             = 'na'
-    PREFILTER       = 'False'
-    REF_X           = '32'
-    REF_Y           = '32'
-    SEARCH_X        = '32'
-    SEARCH_Y        = '32'
-    STEP            = '8'
-    M_SCRIPTS_DIR   = 'na'
-    VEL_MAX         = 'na'
-    TOL             = 'na'
-    NUMDIF          = 'na'
-    SCALE           = 'na'
-    PAIRS           = './Landsat8_example/landsat8_2016_200_216.txt'
-    GNU_PARALLEL    = 'False'
-    NODE_LIST       = 'None'
-    # ========================================================
-    # UTM_ZONE        = '41'
+    # UTM_ZONE        = '5'
     # UTM_LETTER      = 'na'
-    # BAND            = 'na'
-    # ICE             = 'na/na'
-    # ROCK            = 'na/na'
+    # BAND            = 'na' 
+    # ICE             = 'na/na' 
+    # ROCK            = 'na/na' 
     # IMAGE_DIR       = 'na/na'
-    # METADATA_DIR    = '.'
-    # PAIRS_DIR       = '.'
+    # METADATA_DIR    = './Landsat8_example/IMAGES'
+    # PAIRS_DIR       = './Landsat8_example'
     # PROCESSORS      = '16'
     # RESOLUTION      = '15'
     # SATELLITE       = 'na'
@@ -102,31 +51,21 @@ try:
     # PREFILTER       = 'False'
     # REF_X           = '32'
     # REF_Y           = '32'
-    # SEARCH_X        = '8'
-    # SEARCH_Y        = '8'
-    # STEP            = '4'
+    # SEARCH_X        = '32'
+    # SEARCH_Y        = '32'
+    # STEP            = '8'
     # M_SCRIPTS_DIR   = 'na'
     # VEL_MAX         = 'na'
     # TOL             = 'na'
     # NUMDIF          = 'na'
     # SCALE           = 'na'
-    # PAIRS           = './pairs.txt'
+    # PAIRS           = './Landsat8_example/landsat8_2016_200_216.txt'
     # GNU_PARALLEL    = 'False'
     # NODE_LIST       = 'None'
     # ========================================================
 
-    # ======== Check if PAIRS_DIR, METADATA_DIR, and PAIRS exist ========
-    if not os.path.exists(PAIRS_DIR):
-        print("\n***** ERROR: Pair directory specified (\"" + PAIRS_DIR + "\") not found, make sure full path is provided, exiting...\n");
-        sys.exit(1)
 
-    if not os.path.exists(METADATA_DIR):
-        print("\n***** ERROR: Metadata directory specified (\"" + METADATA_DIR + "\") not found, make sure full path is provided, exiting...\n");
-        sys.exit(1)
 
-    if not os.path.exists(PAIRS):
-        print("\n***** ERROR: Pair list \"" + PAIRS + "\" not found, make sure full path is provided, exiting...\n");
-    # ===================================================================
 
     # ======== Load pairs. ========
     # pairs_hash ==> {'./Landsat8_example/IMAGES/LC80630182016200LGN00_B8_yahtse.TIF ./Landsat8_example/IMAGES/LC80630182016216LGN00_B8_yahtse.TIF\n': './Landsat8_example/IMAGES/LC80630182016200LGN00_B8_yahtse.TIF ./Landsat8_example/IMAGES/LC80630182016216LGN00_B8_yahtse.TIF\n'}
@@ -573,3 +512,4 @@ except IOError:
     print("*"*n + "*****")
     print(message)
     print("*"*n + "*****")
+"""

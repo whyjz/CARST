@@ -9,14 +9,14 @@ from datetime import datetime
 class TimeSeriesDEM(np.ndarray):
 
 	"""
-	This class can include many DEMs (in UtilDEM.SingleDEM object) and then create a 3-D matrix.
+	This class can include many DEMs (in UtilTIF.SingleTIF object) and then create a 3-D matrix.
 	each DEM is aligned along z-axis so that TimeSeriesDEM[m, n, :] would be the time series at pixel (m, n).
 	"""
 
 	def __new__(cls, dem=None, array=None, date=None, uncertainty=None):
 
 		""" 
-		You need to provide a UtilDEM.SingleDEM object, or provide array, date, and uncertainty separately.
+		You need to provide a UtilTIF.SingleTIF object, or provide array, date, and uncertainty separately.
 		TimeSeriesDEM is a n-m-k ndarray matrix, which n-m is the dem dimension, k is the count of dems.
 		You need to make sure all input dems have the same size (pixel number).
 		TimeSeriesDEM.date: a list of datetime object, which the length is k.
@@ -64,7 +64,7 @@ class TimeSeriesDEM(np.ndarray):
 
 		"""
 		Add a new DEM to the DEM time series.
-		dem is a UtilDEM.SingleDEM object.
+		dem is a UtilTIF.SingleTIF object.
 		"""
 
 		self.date.append(dem.date)

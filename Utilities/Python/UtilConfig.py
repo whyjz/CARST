@@ -11,7 +11,7 @@ try:
 	import ConfigParser                    # python 2
 except:
 	import configparser as ConfigParser    # python 3
-from UtilDEM import SingleDEM
+from UtilTIF import SingleTIF
 
 class CsvTable:
 
@@ -27,19 +27,32 @@ class CsvTable:
 		self.write_pythonver_dict = {2: 'wb', 3: 'w'}  # csv module in python 2/3 runs differently
 
 
-	def GetDEM(self):
+	def GetDEM(self, delimiter=','):
 
 		"""
-		Get DEMs from the contents of this csv file". Return a list of SingleDEM objects.
+		Get DEMs from the contents of this csv file. Return a list of SingleTIF objects.
 		"""
 
 		dems = []
 		with open(self.fpath, self.read_pythonver_dict[self.python_version]) as csvfile:
-			csvcontent = csv.reader(csvfile, skipinitialspace=True)
+			csvcontent = csv.reader(csvfile, skipinitialspace=True, delimiter=delimiter)
 			next(csvcontent, None)    # Skip the header
 			for row in csvcontent:
-				dems.append(SingleDEM(*row[:3]))
+				dems.append(SingleTIF(*row[:3]))
 		return dems
+
+	def GetImgPair(self, delimiter=','):
+
+		"""
+		Get ImgPair from the contents of this csv file
+		"""
+
+		imgpairs = []
+		with open(self.fpath, self.read_pythonver_dict[self.python_version]) as csvfile:
+			csvcontent = csv.reader(csvfile, skipinitialspace=True, delimiter=delimiter)
+			for row in csvcontent:
+				imgpairs.append(row[:2])
+		return imgpairs
 
 	def SaveData(self, data):
 
@@ -63,7 +76,7 @@ class CsvTable:
 
 		if self.data:
 			header = ['filename', 'date', 'uncertainty', 'mean_offset_wrt_refpts', \
-			          'trimmed_N', 'trimming_lb', 'trimming_up', 'refpts_file']
+					  'trimmed_N', 'trimming_lb', 'trimming_up', 'refpts_file']
 			with open(self.fpath, self.write_pythonver_dict[self.python_version]) as csvfile:
 				# python 3 should be open(fname, 'w', newline='') and we didn't add argument "newline" here. 
 				# I don't know if it would cause some issues or not?
@@ -105,8 +118,6 @@ class ConfParams:
 					section_contents[item[0]] = item[1]
 				setattr(self, section, section_contents)
 
-			self.VerifyParam()
-
 		else:
 			print('Warning: No ini file is given. Nothing will run.')
 
@@ -124,6 +135,22 @@ class ConfParams:
 				os.makedirs(self.gdalwarp['output_dir'])    # create gdalwarp output folder
 
 
+	"""
+	# ======== Check if PAIRS_DIR, METADATA_DIR, and PAIRS exist ========
+	if not os.path.exists(PAIRS_DIR):
+		print("\n***** ERROR: Pair directory specified (\"" + PAIRS_DIR + "\") not found, make sure full path is provided, exiting...\n");
+		sys.exit(1)
+
+	if not os.path.exists(METADATA_DIR):
+		print("\n***** ERROR: Metadata directory specified (\"" + METADATA_DIR + "\") not found, make sure full path is provided, exiting...\n");
+		sys.exit(1)
+
+	if not os.path.exists(PAIRS):
+		print("\n***** ERROR: Pair list \"" + PAIRS + "\" not found, make sure full path is provided, exiting...\n");
+	# ===================================================================
+	"""
+
+
 	def GetDEM(self):
 
 		"""
@@ -135,4 +162,17 @@ class ConfParams:
 			return csv.GetDEM()
 		else:
 			print('Warning: No DEM-list file is given. Nothing will run.')
+			return []
+
+	def GetImgPair(self, delimiter=','):
+
+		"""
+		Get ImgPair from the contents of this csv file
+		"""
+
+		if 'pairs_list' in self.io:
+			csv = CsvTable(self.io['pairs_list'])
+			return csv.GetImgPair(delimiter=delimiter)
+		else:
+			print('Warning: No Img-list file is given. Nothing will run.')
 			return []

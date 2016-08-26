@@ -1,7 +1,7 @@
-# Class: singleDEM
+# Class: singleTIF
 # used for dhdt
-# by Whyjay Zheng, Jul 20 2016
-# last edit: Aug 17 2016
+# by Whyjay Zheng, Jul 20 2016 (as UtilDEM.py)
+# last edit: Aug 26 2016
 
 import sys
 import subprocess
@@ -14,7 +14,7 @@ except:
 	from osgeo import gdal        # sometimes gdal is part of osgeo modules
 # we assume the fpath is the file with .tif or .TIF suffix.
 
-class SingleDEM:
+class SingleTIF:
 
 	"""
 	DEM object. Provide operations like "Unify" (gdalwarp) and "GetPointsFromXYZ" (grdtrack).
