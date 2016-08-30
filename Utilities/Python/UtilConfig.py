@@ -51,7 +51,8 @@ class CsvTable:
 		with open(self.fpath, self.read_pythonver_dict[self.python_version]) as csvfile:
 			csvcontent = csv.reader(csvfile, skipinitialspace=True, delimiter=delimiter)
 			for row in csvcontent:
-				imgpairs.append(row[:2])
+				row_obj = [SingleTIF(i) for i in row[:2]]
+				imgpairs.append(row_obj)
 		return imgpairs
 
 	def SaveData(self, data):
@@ -131,8 +132,9 @@ class ConfParams:
 			for key in self.regression:
 				self.regression[key] = int(self.regression[key])
 		if hasattr(self, 'gdalwarp'):
-			if not os.path.exists(self.gdalwarp['output_dir']):
-				os.makedirs(self.gdalwarp['output_dir'])    # create gdalwarp output folder
+			if 'output_dir' in self.gdalwarp:
+				if not os.path.exists(self.gdalwarp['output_dir']):
+					os.makedirs(self.gdalwarp['output_dir'])    # create gdalwarp output folder
 
 
 	"""
@@ -154,7 +156,7 @@ class ConfParams:
 	def GetDEM(self):
 
 		"""
-		Get DEMs from "csvfile" field. Return a list of SingleDEM objects.
+		Get DEMs from "csvfile" field. Return a list of SingleTIF objects.
 		"""
 
 		if 'csvfile' in self.demlist:

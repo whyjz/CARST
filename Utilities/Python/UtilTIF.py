@@ -1,9 +1,10 @@
 # Class: singleTIF
 # used for dhdt
-# by Whyjay Zheng, Jul 20 2016 (as UtilDEM.py)
+# by Whyjay Zheng, Jul 20 2016 (was UtilDEM.py)
 # last edit: Aug 26 2016
 
 import sys
+import os
 import subprocess
 from subprocess import PIPE
 import numpy as np
@@ -12,12 +13,18 @@ try:
 	import gdal
 except:
 	from osgeo import gdal        # sometimes gdal is part of osgeo modules
+from osgeo import osr
 # we assume the fpath is the file with .tif or .TIF suffix.
 
 class SingleTIF:
 
 	"""
 	DEM object. Provide operations like "Unify" (gdalwarp) and "GetPointsFromXYZ" (grdtrack).
+	Future improvement: detect I/O error, like this:
+
+	if not os.path.exists(image1_path):
+	print("\n***** WARNING: \"" + image1_path + "\" not found, make sure full path is provided, skipping corresponding pair...\n");
+	continue;
 	"""
 
 	def __init__(self, fpath, date=None, uncertainty=None):
@@ -38,19 +45,51 @@ class SingleTIF:
 		dsband = ds.GetRasterBand(band)
 		return dsband.GetNoDataValue()
 
+	def GetProj4(self):
+
+		"""
+		return Proj.4 string.
+		"""
+
+		ds = gdal.Open(self.fpath)
+		wkt_text = ds.GetProjection()
+		srs = osr.SpatialReference()
+		srs.ImportFromWkt(wkt_text)
+		return srs.ExportToProj4()
+
+	def GetExtent(self):
+
+		"""
+		return extent: ul_x, ul_y, lr_x, lr_y. ul = upper left; lr = lower right.
+		"""
+
+		ds = gdal.Open(self.fpath)
+		ulx, xres, xskew, uly, yskew, yres  = ds.GetGeoTransform()
+		lrx = ulx + (ds.RasterXSize * xres)
+		lry = uly + (ds.RasterYSize * yres)
+		return ulx, uly, lrx, lry
+
 	def Unify(self, params):
 
 		""" Use gdalwarp to clip, reproject, and resample a DEM using a given set of params (which can 'unify' all DEMs). """
 
 		print('Calling Gdalwarp...')
 		fpath_warped = self.fpath[:-4] + '_warped' + self.fpath[-4:]
-		newpath = '/'.join([params['output_dir'], fpath_warped.split('/')[-1]])
-		gdalwarp_cmd = 'gdalwarp' +\
-		               ' -t_srs ' + params['t_srs'] +\
-		               ' -tr ' + params['tr'] +\
-		               ' -te ' + params['te'] +\
-		               ' -overwrite ' +\
-		               self.fpath + ' ' + newpath
+		if 'output_dir' in params:
+			newpath = '/'.join([params['output_dir'], fpath_warped.split('/')[-1]])
+		else:
+			# for pixel tracking (temporarily)
+			newfolder = 'test_folder'
+			if not os.path.exists(newfolder):
+				os.makedirs(newfolder)
+			newpath = '/'.join([newfolder, fpath_warped.split('/')[-1]])
+			newpath = newpath.replace(newpath.split('.')[-1], 'img')
+		gdalwarp_cmd = 'gdalwarp -t_srs ' + params['t_srs'] + ' -tr ' + params['tr'] + ' -te ' + params['te']
+		if 'of' in params:
+			gdalwarp_cmd += ' -of ' + params['of']
+		if 'ot' in params:
+			gdalwarp_cmd += ' -ot ' + params['ot']
+		gdalwarp_cmd += ' -overwrite ' + self.fpath + ' ' + newpath
 		print(gdalwarp_cmd)
 		retcode = subprocess.call(gdalwarp_cmd, shell=True)
 		if retcode != 0:
@@ -98,8 +137,8 @@ class SingleTIF:
 		print('Calling Grdtrack...')
 		newpath = 'log_getUncertaintyDEM_grdtrack_output.xyz'
 		grdtrack_cmd = 'grdtrack ' + xyzfilename +\
-		               ' -G' + self.fpath +\
-		               ' > ' + newpath
+					   ' -G' + self.fpath +\
+					   ' > ' + newpath
 		print(grdtrack_cmd)
 		retcode = subprocess.call(grdtrack_cmd, shell=True)
 		if retcode != 0:

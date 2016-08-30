@@ -5,14 +5,14 @@ import sys
 import os
 # sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
 sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
-import re
-import subprocess
-# from UtilDEM import SingleDEM
+# import re
+# import subprocess
+from UtilTIF import SingleTIF
 from UtilConfig import ConfParams
 # from UtilFit import TimeSeriesDEM
-from splitAmpcor import splitAmpcor
-from getxyzs import getxyzs
-import datetime
+# from splitAmpcor import splitAmpcor
+# from getxyzs import getxyzs
+# import datetime
 
 if len(sys.argv) < 2:
     print('Error: Usage: pixeltrack.py config_file')
@@ -26,7 +26,57 @@ ini.ReadParam()
 ini.VerifyParam()
 imgpairlist = ini.GetImgPair(delimiter=' ')
 
-print(imgpairlist)
+# print(imgpairlist)
+# imgpairlist = pair_hash
+#    i.e. imgpair = [[<SingleTIF>, <SingleTIF>], [<SingleTIF>, <SingleTIF>], ...]
+#                            1st pair          ,          2nd pair         , ...
+
+# skip the date input first
+# skip sorting the first and the second (default is that the first is the earlier)
+# skip dealing with different projection
+# skip creating new folder based on its date
+
+# fixed parameters
+ini.gdalwarp['of'] = 'ENVI'
+ini.gdalwarp['ot'] = 'Float32'
+
+
+# ==== warp all DEMs using gdalwarp ====
+
+for imgpair in imgpairlist:
+    if not ini.gdalwarp['te']:
+        extent = [img.GetExtent() for img in imgpair]
+        intersection = [max(extent[0][0], extent[1][0]), 
+                        min(extent[0][1], extent[1][1]), 
+                        min(extent[0][2], extent[1][2]), 
+                        max(extent[0][3], extent[1][3])]
+        intersection_te = [intersection[i] for i in [0, 3, 2, 1]]
+        ini.gdalwarp['te'] = '{:f} {:f} {:f} {:f}'.format(*intersection_te)
+    if not ini.gdalwarp['t_srs']:
+        ini.gdalwarp['t_srs'] = '"' + imgpair[0].GetProj4() + '"'
+
+    for img in imgpair:
+        img.Unify(ini.gdalwarp)
+
+    ampcor_label = "r" +  ini.splitampcor['ref_x']    + "x" + ini.splitampcor['ref_y']    +\
+                   "_s" + ini.splitampcor['search_x'] + "x" + ini.splitampcor['search_y']
+
+
+
+
+
+# print(ini.gdalwarp['of'])
+# print(ini.gdalwarp['ot'])
+
+
+
+
+
+
+# print(imgpairlist[0][0].fpath)
+# img = SingleTIF(imgpairlist[0][0])
+# print(imgpairlist[0][0].GetExtent())
+# print(imgpairlist[0][0].GetProj4())
 
 
 """
@@ -65,38 +115,6 @@ try:
     # ========================================================
 
 
-
-
-    # ======== Load pairs. ========
-    # pairs_hash ==> {'./Landsat8_example/IMAGES/LC80630182016200LGN00_B8_yahtse.TIF ./Landsat8_example/IMAGES/LC80630182016216LGN00_B8_yahtse.TIF\n': './Landsat8_example/IMAGES/LC80630182016200LGN00_B8_yahtse.TIF ./Landsat8_example/IMAGES/LC80630182016216LGN00_B8_yahtse.TIF\n'}
-    # so strange. will change it.
-    pairs_hash = [];    
-
-    infile = open(PAIRS, "r");
-
-    for pair in infile:
-
-        if re.search("^\s*#", pair):
-            continue;
-
-        image1_path, image2_path = pair.split();
-
-        if not os.path.exists(image1_path):
-            print("\n***** WARNING: \"" + image1_path + "\" not found, make sure full path is provided, skipping corresponding pair...\n");
-            continue;
-
-        elif not os.path.exists(image2_path):
-            print("\n***** WARNING: \"" + image2_path + "\" not found, make sure full path is provided, skipping corresponding pair...\n");
-            continue;
-
-        pairs_hash.append([image1_path, image2_path])
-
-    infile.close();
-
-    if len(pairs_hash) == 0:
-        print("\n***** ERROR: No valid pairs found,  make sure correct paths were provided in \"" + PAIRS + "\", exiting...\n");
-        sys.exit(1)
-    # =================================
 
 
     for pair in pairs_hash:
@@ -228,83 +246,6 @@ try:
         later_cut_path = later_image_path[ : later_image_path.rfind(".")] + "_cut.img";
         # early_cut_path = './20160803203709_20160718203706/LC80630182016200LGN00_B8_yahtse_cut.img'
 
-        # ============= Get UTM Zone Number =============
-        cmd = "\ngdalinfo " + early_image_path + "\n";
-        pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
-        info = pipe.read();
-        pipe.close();
-        # print(info)
-        # print('-----')
-        # print(re.search("UTM\s*zone\s*",info))
-
-        # Convert byte literals to UTF string (compatible to python 3)
-        info = info.decode("utf-8")
-        zone1  = info[re.search("UTM\s*zone\s*",info).end(0) : re.search("UTM\s*zone\s*\d+",info).end(0)];
-        # zone1 = '7'   (UTM zone 7N)
-
-        cmd = "\ngdalinfo " + later_image_path + "\n";
-        pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
-        info = pipe.read();
-        pipe.close();
-
-        # Convert byte literals to UTF string (compatible to python 3)
-        info = info.decode("utf-8")
-        zone2  = info[re.search("UTM\s*zone\s*",info).end(0) : re.search("UTM\s*zone\s*\d+",info).end(0)];
-
-        if zone1 != UTM_ZONE:
-            cmd = "\ngdalwarp -t_srs '+proj=utm +zone=" + UTM_ZONE + " +north +datum=WGS84' -tr " + RESOLUTION + " " + RESOLUTION + " " + early_image_path + " " + pair_path + "/temp\n";
-            subprocess.call(cmd, shell=True);
-            os.rename(pair_path + "/temp", early_image_path);
-
-        if zone2 != UTM_ZONE:
-            cmd = "\ngdalwarp -t_srs '+proj=utm +zone=" + UTM_ZONE + " +north +datum=WGS84' -tr " + RESOLUTION + " " + RESOLUTION + " " + later_image_path + " " + pair_path + "/temp\n";
-            subprocess.call(cmd, shell=True);
-            os.rename(pair_path + "/temp", later_image_path);
-        # ===============================================
-
-        # ============= Get Extents used for cutting =============
-        cmd = "\ngdalinfo " + early_image_path + "\n";
-        pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
-        info = pipe.read();
-        pipe.close();
-        info = info.decode("utf-8")
-
-        ul_1_x = info[re.search("Upper Left\s*\(\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ul_1_y = info[re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        ur_1_x = info[re.search("Upper Right\s*\(\s*",info).end(0) : re.search("Upper Right\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ur_1_y = info[re.search("Upper Right\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Upper Right\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        lr_1_x = info[re.search("Lower Right\s*\(\s*",info).end(0) : re.search("Lower Right\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        lr_1_y = info[re.search("Lower Right\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Lower Right\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        ll_1_x = info[re.search("Lower Left\s*\(\s*",info).end(0) : re.search("Lower Left\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ll_1_y = info[re.search("Lower Left\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Lower Left\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-
-        cmd = "\ngdalinfo " + later_image_path + "\n";
-        pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
-        info = pipe.read();
-        pipe.close();
-        info = info.decode("utf-8")
-
-        ul_2_x = info[re.search("Upper Left\s*\(\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ul_2_y = info[re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        ur_2_x = info[re.search("Upper Right\s*\(\s*",info).end(0) : re.search("Upper Right\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ur_2_y = info[re.search("Upper Right\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Upper Right\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        lr_2_x = info[re.search("Lower Right\s*\(\s*",info).end(0) : re.search("Lower Right\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        lr_2_y = info[re.search("Lower Right\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Lower Right\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        ll_2_x = info[re.search("Lower Left\s*\(\s*",info).end(0) : re.search("Lower Left\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ll_2_y = info[re.search("Lower Left\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Lower Left\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        # =========================================================
-
-
-        # Compute the total extent
-        ul_x = str(max([float(ul_1_x), float(ul_2_x)]));
-        ul_y = str(min([float(ul_1_y), float(ul_2_y)]));
-        lr_x = str(min([float(lr_1_x), float(lr_2_x)]));
-        lr_y = str(max([float(lr_1_y), float(lr_2_y)]));
-
-        early_cut_path = early_image_path[ : early_image_path.rfind(".")] + "_cut.img";
-        later_cut_path = later_image_path[ : later_image_path.rfind(".")] + "_cut.img";
-        # early_cut_path = './20160803203709_20160718203706/LC80630182016200LGN00_B8_yahtse_cut.img'
-
         # ========= Generate *_cut.img ==========
         if not os. path.exists(early_cut_path):
             cmd  = "\ngdal_translate -of ENVI -ot Float32 -projwin " + ul_x + " " + ul_y + " " + lr_x + " " + lr_y + " " + early_image_path + " " + early_cut_path + "\n";
@@ -317,9 +258,6 @@ try:
         if not os.path.exists(early_cut_path) or not os.path.exists(later_cut_path):
             print("\n***** ERROR: \"gdal_translate\" to cut images to common region unsuccessful skipping \"" + pair_label + "...\n");
         # =======================================
-
-        ampcor_label = "r" + REF_X + "x" + REF_Y + "_s" + SEARCH_X + "x" + SEARCH_Y;
-        # ampcor_label = 'r32x32_s32x32'
 
         # generate ampcor input using splitAmpcor.py
         if not os.path.exists(pair_path + "/ampcor_" + ampcor_label + "_1.in"):
