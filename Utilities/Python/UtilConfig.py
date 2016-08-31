@@ -135,6 +135,14 @@ class ConfParams:
 			if 'output_dir' in self.gdalwarp:
 				if not os.path.exists(self.gdalwarp['output_dir']):
 					os.makedirs(self.gdalwarp['output_dir'])    # create gdalwarp output folder
+		if hasattr(self, 'splitampcor'):
+			for key in self.splitampcor:
+				self.splitampcor[key] = int(self.splitampcor[key])
+		if hasattr(self, 'parallel'):
+			if 'gnu_parallel' in self.parallel:
+				s = self.parallel['gnu_parallel'].lower()
+				self.parallel['gnu_parallel'] = s in ['true', 't', 'yes', 'y', '1']
+
 
 
 	"""

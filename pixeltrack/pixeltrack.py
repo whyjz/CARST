@@ -6,13 +6,13 @@ import os
 # sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
 sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
 # import re
-# import subprocess
+import subprocess
 from UtilTIF import SingleTIF
 from UtilConfig import ConfParams
 # from UtilFit import TimeSeriesDEM
-# from splitAmpcor import splitAmpcor
-# from getxyzs import getxyzs
-# import datetime
+from splitAmpcor import splitAmpcor, ampcor_cmd
+from getxyzs import getxyzs
+from datetime import datetime
 
 if len(sys.argv) < 2:
     print('Error: Usage: pixeltrack.py config_file')
@@ -48,6 +48,13 @@ ini.gdalwarp['ot'] = 'Float32'
 # ==== warp all DEMs using gdalwarp ====
 
 for imgpair in imgpairlist:
+    pair_dir = 'test_folder'
+    ampcor_label = 'r32x32_s32x32'
+    pair_label = '2016200_2016216'
+    # skip giving ampcor_label at part 2
+    # skip giving pair_label
+    # skip pair_path -> pair_dir/pair_label/blabla...
+
     if not ini.gdalwarp['te']:
         extent = [img.GetExtent() for img in imgpair]
         intersection = [max(extent[0][0], extent[1][0]), 
@@ -58,26 +65,157 @@ for imgpair in imgpairlist:
         ini.gdalwarp['te'] = '{:f} {:f} {:f} {:f}'.format(*intersection_te)
     if not ini.gdalwarp['t_srs']:
         ini.gdalwarp['t_srs'] = '"' + imgpair[0].GetProj4() + '"'
-
-    for img in imgpair:
-        img.Unify(ini.gdalwarp)
-
-    ampcor_label = "r" +  ini.splitampcor['ref_x']    + "x" + ini.splitampcor['ref_y']    +\
-                   "_s" + ini.splitampcor['search_x'] + "x" + ini.splitampcor['search_y']
-
-    print(img.GetRasterXSize())
-    print(img.GetRasterYSize())
+    if False:
+        for img in imgpair:
+            img.Unify(ini.gdalwarp)
 
 
+        ampcor_label = splitAmpcor(imgpair[0].fpath, imgpair[1].fpath, pair_dir, **ini.splitampcor)
+        ampcor_cmd(ampcor_label, pair_dir, ini.splitampcor['nproc'])
+
+        # [Part 1]
+        # Options for processing with gnu parallel or as backgrounded processes
+        print("\n\"ampcor\" running as {:d} separate processes, this step may take several hours to complete...\n".format(ini.splitampcor['nproc']))
+        if ini.parallel['gnu_parallel']:
+            # For what ever reason, ampcor will not run unless it is executed from within the pair_path. 
+            # This is a slopy fix of just hopping in and out of the pair_path to run ampcor
+            cmd  = "cd {}; ".format(pair_dir)
+            if not ini.parallel['node_list']:
+                cmd += '''awk '{$NF=""; print $0}' run_amp.cmd | parallel --workdir $PWD'''
+            else:
+                nodefile = os.path.abspath(ini.parallel['node_list'])
+                print("Using node file " + nodefile)
+                cmd += '''awk '{$NF=""; print $0}' run_amp.cmd | parallel --sshloginfile ''' + nodefile + ''' --workdir $PWD'''
+            # print(cmd)
+            subprocess.call(cmd, shell=True)   # foreground running
+            # print("After all ampcor processes have completed, please rerun the landsatPX.py script.\n")
+            # sys.exit(0)
+        else:
+            # If not using gnu parallel, this block will gracefully exit the script and give instructions
+            # the next step
+            # cmd  = "cd {}; bash run_amp.cmd; cd -\n".format(pair_dir)
+            cmd  = "cd {}; bash run_amp.cmd".format(pair_dir)
+            # print(cmd)
+            subprocess.call(cmd, shell=True)   # background running 
+            # sys.exit(0)
+    else:
+        with open(pair_dir + "/amps_complete.txt") as ac:
+            amps_comp_num = ac.readlines()
+        
+        if len(amps_comp_num) < ini.splitampcor['nproc']:
+            print("\n***** It looks like not all ampcor processes have completed.")
+            print("     Skipping....")
+            sys.exit(1)
+
+        print("\n***** Offset files in \"" + pair_dir + "\" appear to have finished processing, composing results...\n")
+
+        # ==== cat all output to ampcor_label.off ====
+        # if os.path.exists(pair_path + "/ampcor_" + ampcor_label + ".off"):
+        #    print("\n***** \"" + pair_path + "/ampcor_" + ampcor_label + ".off\" already exists, assuming it contains all offsets for this run...\n");
+        # 
+        #
+        #
+        # else:
+
+        cat_cmd = "cat {}/ampcor_{}_*.off > {}/ampcor_{}.off".format(pair_dir, ampcor_label, pair_dir, ampcor_label)
+
+        # for i in range(1, ini.splitampcor['nproc'] + 1):
+        #     # cmd = "\nsed -i '/\*/d' " + pair_path + "/ampcor_" + ampcor_label + "_" + str(i) + ".off\n";
+        #     cat_cmd += pair_path + "/ampcor_" + ampcor_label + "_" + str(i) + ".off ";
+        #     subprocess.call(cmd, shell=True);
+
+        # cat_cmd += "> " + pair_path + "/ampcor_" + ampcor_label + ".off\n";
+        subprocess.call(cat_cmd, shell=True)
+        # ============================================
 
 
+        # get ref samples and lines number 
+        ref_samples = str(imgpair[0].GetRasterXSize())
+        # ref_samples = "";
+        ref_lines   = str(imgpair[0].GetRasterYSize())
+        # ref_lines   = "";
 
-# print(ini.gdalwarp['of'])
-# print(ini.gdalwarp['ot'])
+        # infile = open(early_cut_path.replace(".img",".hdr"), "r");
+
+        # for line in infile:
+
+        #     if line.lower().find("samples") > -1:
+        #         ref_samples = line.split("=")[1].strip();
+
+        #     if line.lower().find("lines") > -1:
+        #         ref_lines = line.split("=")[1].strip();
+
+        # infile.close();
+        # print(ref_samples)
+        # print(ref_lines)
+        # ref_samples = '1698'
+        # ref_lines = '1087'
+
+        east_name      = pair_label + "_" + ampcor_label + "_eastxyz";
+        north_name     = pair_label + "_" + ampcor_label + "_northxyz";
+        mag_name       = pair_label + "_" + ampcor_label + "_mag";
+        east_xyz_path  = pair_dir + "/" + east_name + ".txt";
+        north_xyz_path = pair_dir + "/" + north_name + ".txt";
+
+        ul_x = str(intersection[0])
+        ul_y = str(intersection[1])
+        lr_x = str(intersection[2])
+        lr_y = str(intersection[3])
+
+        # if not os.path.exists(east_xyz_path):
+        #     print("\n***** \"getxyzs.py\" running to create E-W and N-S ASCII files with offsets (in m) in the third column and SNR in the 4th column\n \
+        #        ***** NOTE: E-W MAY BE FLIPPED DEPENDING ON HEMISPHERE, PLEASE CHECK MANUALLY...\n");
+        #     # This will generate a lot of warnings when using python 3...
+        #     # anyway, it's generating 20160803203709_20160718203706_r32x32_s32x32_eastxyz.txt
+        #     #                     and 20160803203709_20160718203706_r32x32_s32x32_northxyz.txt
+        getxyzs(pair_dir, ampcor_label, ini.splitampcor['step'], ini.splitampcor['step'], "1", "15", ref_samples, ref_lines, ul_x, ul_y, pair_label);
+
+        # else:
+        #     print("\n***** \"" + east_xyz_path + "\" already exists, assuming E-W and N-S ASCII offsets (in m) files created properly for this run...\n");
+
+        east_grd_path  = pair_dir + "/" + east_name + ".grd"
+        north_grd_path = pair_dir + "/" + north_name + ".grd"
+        mag_grd_path   = pair_dir + "/" + mag_name + ".grd"
+        snr_grd_path   = pair_dir + "/" + north_name.replace("north", "snr") + ".grd"
 
 
+        R = "-R" + ul_x + "/" + lr_y + "/" + lr_x + "/" + ul_y + "r";
+        # R = '-R465067.5/6665272.5/490537.5/6681577.5r'
 
+        RESOLUTION = 15
 
+        # if not os.path.exists(east_grd_path):
+        if True:
+            print("\n***** Creating \"" + east_grd_path + "\" and \"" + north_grd_path + "\" using \"xyz2grd\"...\n");
+            # early_datetime = datetime.datetime(int(early_date[0:4]), int(early_date[4:6]), int(early_date[6:8]), \
+            #                    int(early_date[8:10]), int(early_date[10:12]), int(early_date[12:14]));
+            # later_datetime = datetime.datetime(int(later_date[0:4]), int(later_date[4:6]), int(later_date[6:8]), \
+            #                    int(later_date[8:10]), int(later_date[10:12]), int(later_date[12:14]));
+            # day_interval   = str((later_datetime - early_datetime).total_seconds() / (60. * 60. * 24.));
+            early_datetime = datetime(2016, 7, 18, 20, 37, 6)
+            later_datetime = datetime(2016, 8, 3, 20, 37, 9)
+            day_interval = '16.00003472222222'
+            cmd  = "\nxyz2grd " + east_xyz_path + " " + R + " -G" + east_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
+            cmd += "\nxyz2grd " + north_xyz_path + " " + R + " -G" + north_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
+            cmd += "\ngawk '{print $1\" \"$2\" \"$4}' " + north_xyz_path + " | xyz2grd " + R + " \
+                -G" + snr_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
+            cmd += "\ngrdmath " + east_grd_path + " " + day_interval + " DIV --IO_NC4_CHUNK_SIZE=c = " + east_grd_path + "\n";
+            cmd += "\ngrdmath " + north_grd_path + " " + day_interval + " DIV --IO_NC4_CHUNK_SIZE=c = " + north_grd_path + "\n";
+            cmd += "\ngrdmath " + north_grd_path + " " + east_grd_path + " HYPOT --IO_NC4_CHUNK_SIZE=c = " + mag_grd_path + "\n";
+            subprocess.call(cmd, shell=True);
+
+            
+
+            # please note that xxxxx_snrxyz.grd only counts the error from fitting a cross-correlation peak.
+            # it does not include the offset between ref image and search image, which is also can be a significant source of errors.
+            #
+            # The unit in mag, north, east is pixel/day.
+
+        # else:
+        #    print("\n***** \"" + east_grd_path + "\" already exists, assuming m/day velocity grids already made for this run...\n"); 
+                               
+               
+    # sys.exit(0)
 
 
 
@@ -85,41 +223,6 @@ for imgpair in imgpairlist:
 
 """
 try:
-
-
-    # for test, all the parameters are given here.
-    # ========================================================
-    # UTM_ZONE        = '5'
-    # UTM_LETTER      = 'na'
-    # BAND            = 'na' 
-    # ICE             = 'na/na' 
-    # ROCK            = 'na/na' 
-    # IMAGE_DIR       = 'na/na'
-    # METADATA_DIR    = './Landsat8_example/IMAGES'
-    # PAIRS_DIR       = './Landsat8_example'
-    # PROCESSORS      = '16'
-    # RESOLUTION      = '15'
-    # SATELLITE       = 'na'
-    # SNR_CUTOFF      = 'na'
-    # DEM             = 'na'
-    # PREFILTER       = 'False'
-    # REF_X           = '32'
-    # REF_Y           = '32'
-    # SEARCH_X        = '32'
-    # SEARCH_Y        = '32'
-    # STEP            = '8'
-    # M_SCRIPTS_DIR   = 'na'
-    # VEL_MAX         = 'na'
-    # TOL             = 'na'
-    # NUMDIF          = 'na'
-    # SCALE           = 'na'
-    # PAIRS           = './Landsat8_example/landsat8_2016_200_216.txt'
-    # GNU_PARALLEL    = 'False'
-    # NODE_LIST       = 'None'
-    # ========================================================
-
-
-
 
     for pair in pairs_hash:
 
@@ -275,44 +378,7 @@ try:
         if not os.path.exists(pair_path + "/ampcor_" + ampcor_label + "_1.off"):
 
             
-            # write something to run_amp.cmd
-            amp_file = open(pair_path+"/run_amp.cmd", 'w')
-            amps_complete = open(pair_path+"/amps_complete.txt", 'w')
-            amps_complete.close()
-            for i in range(1, int(PROCESSORS) + 1):
-                # there used to be a path issue and now fixed - WJ
-                amp_file.write("(ampcor " + "ampcor_" + ampcor_label + "_" + str(i) + ".in rdf > " + "ampcor_" + ampcor_label + "_" + str(i) + ".out; echo " + str(i) + " >> amps_complete.txt) &\n")
-            amp_file.close()        
-
-
-            # Options for processing with gnu parallel or as backgrounded processes
-            if GNU_PARALLEL == "True":
-                print("\n\"ampcor\" running as " + PROCESSORS + " separate processes, this step may take several hours to complete...\n");
-                # For what ever reason, ampcor will not run unless it is executed from within the pair_path. 
-                # This is a slopy fix of just hopping in and out of the pair_path to run ampcor
-                cmd  = "cd "+pair_path+"\n";
-                if NODE_LIST == "None":
-                    cmd += '''\nawk '{$NF=""; print $0}' run_amp.cmd | parallel --workdir $PWD\n''';
-                else:
-                    print("Using node file "+NODE_LIST)
-                    cmd += '''\nawk '{$NF=""; print $0}' run_amp.cmd | parallel --sshloginfile ''' + NODE_LIST + ''' --workdir $PWD\n''';
-                cmd += "cd ../\n";
-                subprocess.call(cmd, shell=True);
-                print("After all ampcor processes have completed, please rerun the landsatPX.py script.\n")
-                sys.exit(0)
-
-            # If not using gnu parallel, this try block will gracefully exit the script and give instructions
-            # the next step
-            elif GNU_PARALLEL == "False":
-                cmd  = "cd " + pair_path + "\n";
-                cmd += "bash run_amp.cmd\n";
-                cmd += "cd ../\n" 
-                subprocess.call(cmd, shell=True);
-
-                print("\n\"ampcor\" running as " + PROCESSORS + " separate processes, this step may take several hours to complete...\n");
-                print("After all ampcor processes have completed, please rerun the landsatPX.py script.\n")
-                sys.exit(0)
-                   
+                  
         # [Part 2] If the program detects xxxxxxx_1.off, it will think that ampcor has finished (by runnning run_amp.cmd).
         pair_done = True;
 

@@ -37,6 +37,7 @@ class SingleTIF:
 		return ds.GetProjection()
 
 	def GetGeoTransform(self):
+		""" returns [ulx, xres, xskew, uly, yskew, yres] """
 		ds = gdal.Open(self.fpath)
 		return ds.GetGeoTransform()
 
@@ -48,7 +49,7 @@ class SingleTIF:
 	def GetProj4(self):
 
 		"""
-		return Proj.4 string.
+		return projection as Proj.4 string.
 		"""
 
 		ds = gdal.Open(self.fpath)

@@ -336,35 +336,35 @@ def landsatPX(params_path):
         infile.close();
         
 
-        # for test, all the parameters are given here.
+        # for test, all the parameters are given here. (yahtse, which is for test data, is at UTM zone 7)
         # ========================================================
-        # UTM_ZONE        = '5'
-        # UTM_LETTER      = 'V'
-        # BAND            = 'B8' 
-        # ICE             = './Landsat8_example/OUTLINES/StEliasMtn_utm7v_ice.gmt' 
-        # ROCK            = './Landsat8_example/OUTLINES/StEliasMtn_utm7v_rock.gmt' 
-        # IMAGE_DIR       = './Landsat8_example/IMAGES'
-        # METADATA_DIR    = './Landsat8_example/IMAGES'
-        # PAIRS_DIR       = '.'
-        # PROCESSORS      = '16'
-        # RESOLUTION      = '15'
-        # SATELLITE       = 'Landsat8'
-        # SNR_CUTOFF      = '0'
-        # DEM             = './Landsat8_example/DEM/yahtse_srtm_dem.tif'
-        # PREFILTER       = 'False'
-        # REF_X           = '32'
-        # REF_Y           = '32'
-        # SEARCH_X        = '32'
-        # SEARCH_Y        = '32'
-        # STEP            = '8'
-        # M_SCRIPTS_DIR   = '../../Utilities/Matlab/velocity_postfilter'
-        # VEL_MAX         = '28'
-        # TOL             = '0.3'
-        # NUMDIF          = '3'
-        # SCALE           = '1500000'
-        # PAIRS           = './Landsat8_example/landsat8_2016_200_216.txt'
-        # GNU_PARALLEL    = 'False'
-        # NODE_LIST       = 'None'
+        UTM_ZONE        = '5'
+        UTM_LETTER      = 'V'
+        BAND            = 'B8' 
+        ICE             = './OUTLINES/StEliasMtn_utm7v_ice.gmt' 
+        ROCK            = './OUTLINES/StEliasMtn_utm7v_rock.gmt' 
+        IMAGE_DIR       = './IMAGES'
+        METADATA_DIR    = './IMAGES'
+        PAIRS_DIR       = '.'
+        PROCESSORS      = '16'
+        RESOLUTION      = '15'
+        SATELLITE       = 'Landsat8'
+        SNR_CUTOFF      = '0'
+        DEM             = './DEM/yahtse_srtm_dem.tif'
+        PREFILTER       = 'False'
+        REF_X           = '32'
+        REF_Y           = '32'
+        SEARCH_X        = '32'
+        SEARCH_Y        = '32'
+        STEP            = '8'
+        M_SCRIPTS_DIR   = '../../Utilities/Matlab/velocity_postfilter'
+        VEL_MAX         = '28'
+        TOL             = '0.3'
+        NUMDIF          = '3'
+        SCALE           = '1500000'
+        PAIRS           = './landsat8_2016_200_216.txt'
+        GNU_PARALLEL    = 'False'
+        NODE_LIST       = 'None'
         # ========================================================
 
         # print(PAIRS_DIR)
@@ -520,6 +520,7 @@ def landsatPX(params_path):
             pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
             info = pipe.read();
             pipe.close();
+            info = info.decode("utf-8")
             # print(info)
             # print('-----')
             # print(re.search("UTM\s*zone\s*",info))
@@ -531,6 +532,7 @@ def landsatPX(params_path):
             pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
             info = pipe.read();
             pipe.close();
+            info = info.decode("utf-8")
 
             zone2  = info[re.search("UTM\s*zone\s*",info).end(0) : re.search("UTM\s*zone\s*\d+",info).end(0)];
 
@@ -548,6 +550,7 @@ def landsatPX(params_path):
             pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
             info = pipe.read();
             pipe.close();
+            info = info.decode("utf-8")
 
             ul_1_x = info[re.search("Upper Left\s*\(\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*",info).end(0)];
             ul_1_y = info[re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
@@ -562,6 +565,7 @@ def landsatPX(params_path):
             pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
             info = pipe.read();
             pipe.close();
+            info = info.decode("utf-8")
 
             ul_2_x = info[re.search("Upper Left\s*\(\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*",info).end(0)];
             ul_2_y = info[re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
@@ -693,6 +697,7 @@ def landsatPX(params_path):
 
             ref_samples = "";
             ref_lines   = "";
+
 
             infile = open(early_cut_path.replace(".img",".hdr"), "r");
 
