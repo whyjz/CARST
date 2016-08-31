@@ -40,6 +40,10 @@ imgpairlist = ini.GetImgPair(delimiter=' ')
 ini.gdalwarp['of'] = 'ENVI'
 ini.gdalwarp['ot'] = 'Float32'
 
+# print(imgpairlist[0][0].fpath)
+# print(imgpairlist[0][0].GetExtent())
+# print(imgpairlist[0][0].GetProj4())
+
 
 # ==== warp all DEMs using gdalwarp ====
 
@@ -61,6 +65,9 @@ for imgpair in imgpairlist:
     ampcor_label = "r" +  ini.splitampcor['ref_x']    + "x" + ini.splitampcor['ref_y']    +\
                    "_s" + ini.splitampcor['search_x'] + "x" + ini.splitampcor['search_y']
 
+    print(img.GetRasterXSize())
+    print(img.GetRasterYSize())
+
 
 
 
@@ -73,10 +80,7 @@ for imgpair in imgpairlist:
 
 
 
-# print(imgpairlist[0][0].fpath)
-# img = SingleTIF(imgpairlist[0][0])
-# print(imgpairlist[0][0].GetExtent())
-# print(imgpairlist[0][0].GetProj4())
+
 
 
 """

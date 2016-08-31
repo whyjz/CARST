@@ -2,14 +2,25 @@
 
 # splitAmpcor.py
 # Author: Andrew Kenneth Melkonian
-# last edit: Aug 21, 2016
+# modified by: Joey Durkin and Whyjay Zheng
+# last edit: Aug 31, 2016 by Whyjay Zheng
 
-import os;
-import subprocess;
-import sys;
-
+import os
+import subprocess
+import sys
+from UtilTIF import SingleTIF
+from findOffset import findOffset
 
 def splitAmpcor(ref_path, search_path, pair_dir, nproc, resolution, ref_x, ref_y, search_x, search_y, step):
+
+	ref_img = SingleTIF(ref_path)
+	search_img = SingleTIF(search_path)
+	ref_samples = str(ref_img.GetRasterXSize())
+	ref_lines = str(ref_img.GetRasterYSize())
+	search_samples = str(search_img.GetRasterXSize())
+	search_lines = str(search_img.GetRasterXSize())
+
+	
 
 	# ==== find .hdr files ====
 	ref_hdr     = ref_path + ".hdr";
@@ -21,6 +32,8 @@ def splitAmpcor(ref_path, search_path, pair_dir, nproc, resolution, ref_x, ref_y
 	
 	if not os.path.exists(search_hdr):
 		search_hdr = search_path[ : search_path.rfind(".")] + ".hdr";
+
+	"""
 
 	# ==== find samples and lines number ====
 	ref_samples = "";
@@ -56,11 +69,12 @@ def splitAmpcor(ref_path, search_path, pair_dir, nproc, resolution, ref_x, ref_y
 			search_lines = elements[len(elements)-1].strip();
 
 	infile.close();
-
-	from findOffset import findOffset;
+	"""
 	
 	output = findOffset(ref_hdr, search_hdr, resolution);
-	
+	print(output)
+
+
 	mean_x = str(output[4]);
 	mean_y = str(output[5]);
 

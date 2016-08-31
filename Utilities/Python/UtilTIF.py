@@ -57,6 +57,16 @@ class SingleTIF:
 		srs.ImportFromWkt(wkt_text)
 		return srs.ExportToProj4()
 
+	def GetRasterXSize(self):
+		""" This is 'samples' of a image """
+		ds = gdal.Open(self.fpath)
+		return ds.RasterXSize
+
+	def GetRasterYSize(self):
+		""" This is 'lines' of a image """
+		ds = gdal.Open(self.fpath)
+		return ds.RasterYSize
+
 	def GetExtent(self):
 
 		"""
