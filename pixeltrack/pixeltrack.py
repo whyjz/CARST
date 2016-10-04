@@ -3,12 +3,11 @@
 
 import sys
 import os
-# sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
 sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
 # import re
 import subprocess
-from UtilTIF import SingleTIF
-from UtilConfig import ConfParams
+from UtilRaster import SingleRaster
+from UtilConfig import ConfParams, LS8MTL
 # from UtilFit import TimeSeriesDEM
 from splitAmpcor import splitAmpcor, ampcor_cmd
 from getxyzs import getxyzs
@@ -28,7 +27,7 @@ imgpairlist = ini.GetImgPair(delimiter=' ')
 
 # print(imgpairlist)
 # imgpairlist = pair_hash
-#    i.e. imgpair = [[<SingleTIF>, <SingleTIF>], [<SingleTIF>, <SingleTIF>], ...]
+#    i.e. imgpair = [[<SingleRaster>, <SingleRaster>], [<SingleRaster>, <SingleRaster>], ...]
 #                            1st pair          ,          2nd pair         , ...
 
 # skip the date input first
@@ -173,38 +172,47 @@ for imgpair in imgpairlist:
         # else:
         #     print("\n***** \"" + east_xyz_path + "\" already exists, assuming E-W and N-S ASCII offsets (in m) files created properly for this run...\n");
 
-        east_grd_path  = pair_dir + "/" + east_name + ".grd"
-        north_grd_path = pair_dir + "/" + north_name + ".grd"
-        mag_grd_path   = pair_dir + "/" + mag_name + ".grd"
-        snr_grd_path   = pair_dir + "/" + north_name.replace("north", "snr") + ".grd"
+        # east_grd_path  = pair_dir + "/" + east_name + ".grd"
+        # north_grd_path = pair_dir + "/" + north_name + ".grd"
+        # mag_grd_path   = pair_dir + "/" + mag_name + ".grd"
+        # snr_grd_path   = pair_dir + "/" + north_name.replace("north", "snr") + ".grd"
+        north_tif_path = pair_dir + "/" + north_name + ".tif"
+        east_tif_path = pair_dir + "/" + east_name + ".tif"
 
 
-        R = "-R" + ul_x + "/" + lr_y + "/" + lr_x + "/" + ul_y + "r";
+        # R = "-R" + ul_x + "/" + lr_y + "/" + lr_x + "/" + ul_y + "r";
         # R = '-R465067.5/6665272.5/490537.5/6681577.5r'
 
-        RESOLUTION = 15
+        # RESOLUTION = 15
 
         # if not os.path.exists(east_grd_path):
         if True:
-            print("\n***** Creating \"" + east_grd_path + "\" and \"" + north_grd_path + "\" using \"xyz2grd\"...\n");
+            # print("\n***** Creating \"" + east_grd_path + "\" and \"" + north_grd_path + "\" using \"xyz2grd\"...\n");
             # early_datetime = datetime.datetime(int(early_date[0:4]), int(early_date[4:6]), int(early_date[6:8]), \
             #                    int(early_date[8:10]), int(early_date[10:12]), int(early_date[12:14]));
             # later_datetime = datetime.datetime(int(later_date[0:4]), int(later_date[4:6]), int(later_date[6:8]), \
             #                    int(later_date[8:10]), int(later_date[10:12]), int(later_date[12:14]));
             # day_interval   = str((later_datetime - early_datetime).total_seconds() / (60. * 60. * 24.));
+            """
             early_datetime = datetime(2016, 7, 18, 20, 37, 6)
             later_datetime = datetime(2016, 8, 3, 20, 37, 9)
             day_interval = '16.00003472222222'
-            cmd  = "\nxyz2grd " + east_xyz_path + " " + R + " -G" + east_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
-            cmd += "\nxyz2grd " + north_xyz_path + " " + R + " -G" + north_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
+            """
+            # cmd  = "\nxyz2grd " + east_xyz_path + " " + R + " -G" + east_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
+            # cmd += "\nxyz2grd " + north_xyz_path + " " + R + " -G" + north_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
+            """
             cmd += "\ngawk '{print $1\" \"$2\" \"$4}' " + north_xyz_path + " | xyz2grd " + R + " \
                 -G" + snr_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
             cmd += "\ngrdmath " + east_grd_path + " " + day_interval + " DIV --IO_NC4_CHUNK_SIZE=c = " + east_grd_path + "\n";
             cmd += "\ngrdmath " + north_grd_path + " " + day_interval + " DIV --IO_NC4_CHUNK_SIZE=c = " + north_grd_path + "\n";
             cmd += "\ngrdmath " + north_grd_path + " " + east_grd_path + " HYPOT --IO_NC4_CHUNK_SIZE=c = " + mag_grd_path + "\n";
-            subprocess.call(cmd, shell=True);
+            subprocess.call(cmd, shell=True)
+            """
+            north_tif = SingleRaster(north_tif_path)
+            north_tif.XYZ2Raster(north_xyz_path, projection=imgpair[0].GetProjection())
+            east_tif = SingleRaster(east_tif_path)
+            east_tif.XYZ2Raster(east_xyz_path, projection=imgpair[0].GetProjection())
 
-            
 
             # please note that xxxxx_snrxyz.grd only counts the error from fitting a cross-correlation peak.
             # it does not include the offset between ref image and search image, which is also can be a significant source of errors.
