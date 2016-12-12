@@ -11,7 +11,7 @@ try:
 	import ConfigParser                    # python 2
 except:
 	import configparser as ConfigParser    # python 3
-from UtilTIF import SingleTIF
+from UtilRaster import SingleRaster
 
 class CsvTable:
 
@@ -30,7 +30,7 @@ class CsvTable:
 	def GetDEM(self, delimiter=','):
 
 		"""
-		Get DEMs from the contents of this csv file. Return a list of SingleTIF objects.
+		Get DEMs from the contents of this csv file. Return a list of SingleRaster objects.
 		"""
 
 		dems = []
@@ -38,7 +38,7 @@ class CsvTable:
 			csvcontent = csv.reader(csvfile, skipinitialspace=True, delimiter=delimiter)
 			next(csvcontent, None)    # Skip the header
 			for row in csvcontent:
-				dems.append(SingleTIF(*row[:3]))
+				dems.append(SingleRaster(*row[:3]))
 		return dems
 
 	def GetImgPair(self, delimiter=','):
@@ -51,7 +51,7 @@ class CsvTable:
 		with open(self.fpath, self.read_pythonver_dict[self.python_version]) as csvfile:
 			csvcontent = csv.reader(csvfile, skipinitialspace=True, delimiter=delimiter)
 			for row in csvcontent:
-				row_obj = [SingleTIF(i) for i in row[:2]]
+				row_obj = [SingleRaster(i) for i in row[:2]]
 				imgpairs.append(row_obj)
 		return imgpairs
 
@@ -164,7 +164,7 @@ class ConfParams:
 	def GetDEM(self):
 
 		"""
-		Get DEMs from "csvfile" field. Return a list of SingleTIF objects.
+		Get DEMs from "csvfile" field. Return a list of SingleRaster objects.
 		"""
 
 		if 'csvfile' in self.demlist:
@@ -186,3 +186,41 @@ class ConfParams:
 		else:
 			print('Warning: No Img-list file is given. Nothing will run.')
 			return []
+
+
+class LS8MTL:
+
+	def __init__(self, fpath=None):
+		self.fpath = fpath
+
+	def fit_LS8metadata_to_configparser(MTL_file):
+		for line in MTL_file:
+			# Skip last line ("END") and the "END_GROUP" line.
+			if ('=' in line) and ('END_GROUP' not in line):
+				# Modify "GROUP = BLABLA" into "[BLABLA]" (in order to make headers for configparser)
+				if 'GROUP' in line:
+					line = '[' + line.rstrip().split(' ')[-1] + ']\n'
+				yield line
+
+	def ReadParam(self):
+
+		"""
+		Read parameters and save them as self.xxxx
+		example: if there is a section called "GROUP = PRODUCT_METADATA"
+		and there is an option named "DATE_ACQUIRED = 2016-07-18"
+		then self.PRODUCT_METADATA['date_acquired'] = '2016-07-18'
+		"""
+
+		if self.fpath is not None:
+			config = ConfigParser.RawConfigParser()
+			config.read_file(fit_LS8metadata_to_configparser(open(self.fpath)))
+
+			for section in config.sections():
+				section_contents = {}
+				for item in config.items(section):
+					section_contents[item[0]] = item[1]
+				setattr(self, section, section_contents)
+
+		else:
+			print('Warning: No MTL file is given. Nothing will run.')
+

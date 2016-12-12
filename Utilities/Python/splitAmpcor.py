@@ -8,16 +8,16 @@
 import os
 import subprocess
 import sys
-from UtilTIF import SingleTIF
+from UtilRaster import SingleRaster
 # from findOffset import findOffset
 
 def splitAmpcor(ref_path, search_path, pair_dir='.', nproc=8, ref_x=32, ref_y=32, search_x=32, search_y=32, step=8):
 
-	ref_img = SingleTIF(ref_path)
+	ref_img = SingleRaster(ref_path)
 	ref_samples = ref_img.GetRasterXSize()
 	ref_lines = ref_img.GetRasterYSize()
 	ref_ulx, ref_xres, _, ref_uly, _, ref_yres = ref_img.GetGeoTransform()
-	search_img = SingleTIF(search_path)
+	search_img = SingleRaster(search_path)
 	search_samples = search_img.GetRasterXSize()
 	search_lines = search_img.GetRasterXSize()
 	search_ulx, _, _, search_uly, _, _ = ref_img.GetGeoTransform()

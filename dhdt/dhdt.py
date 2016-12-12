@@ -18,7 +18,7 @@ import sys
 import os
 # sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
 sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
-from UtilTIF import SingleTIF
+from UtilRaster import SingleRaster
 from UtilConfig import ConfParams
 from UtilFit import TimeSeriesDEM
 
@@ -55,7 +55,7 @@ slope, intercept, slope_err, intercept_err = dem_timeseries.Polyfit(**ini.regres
 
 # ==== Write to file ====
 
-dhdt_dem     = SingleTIF('/'.join([ini.result['output_dir'], ini.result['gtiff_slope']]))
+dhdt_dem     = SingleRaster('/'.join([ini.result['output_dir'], ini.result['gtiff_slope']]))
 dhdt_dem.Array2Raster(slope, demlist[0])
-dhdt_err_dem = SingleTIF('/'.join([ini.result['output_dir'], ini.result['gtiff_slope_err']]))
+dhdt_err_dem = SingleRaster('/'.join([ini.result['output_dir'], ini.result['gtiff_slope_err']]))
 dhdt_err_dem.Array2Raster(slope_err, demlist[0])

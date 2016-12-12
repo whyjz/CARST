@@ -48,8 +48,11 @@ ini.gdalwarp['ot'] = 'Float32'
 
 for imgpair in imgpairlist:
     pair_dir = 'test_folder'
-    ampcor_label = 'r32x32_s32x32'
-    pair_label = '2016200_2016216'
+    # ampcor_label = 'r32x32_s32x32'
+    # pair_label = '2016200_2016216'
+    # pair_dir = 'wv_carto'
+    ampcor_label = 'r{}x{}_s{}x{}'.format(ini.splitampcor['ref_x'], ini.splitampcor['ref_y'], ini.splitampcor['search_x'], ini.splitampcor['search_y'])
+    pair_label = 'wv_carto'
     # skip giving ampcor_label at part 2
     # skip giving pair_label
     # skip pair_path -> pair_dir/pair_label/blabla...
@@ -167,7 +170,7 @@ for imgpair in imgpairlist:
         #     # This will generate a lot of warnings when using python 3...
         #     # anyway, it's generating 20160803203709_20160718203706_r32x32_s32x32_eastxyz.txt
         #     #                     and 20160803203709_20160718203706_r32x32_s32x32_northxyz.txt
-        getxyzs(pair_dir, ampcor_label, ini.splitampcor['step'], ini.splitampcor['step'], "1", "15", ref_samples, ref_lines, ul_x, ul_y, pair_label);
+        getxyzs(pair_dir, ampcor_label, ini.splitampcor['step'], ini.splitampcor['step'], "1", "90", ref_samples, ref_lines, ul_x, ul_y, pair_label);
 
         # else:
         #     print("\n***** \"" + east_xyz_path + "\" already exists, assuming E-W and N-S ASCII offsets (in m) files created properly for this run...\n");

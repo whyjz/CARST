@@ -193,18 +193,23 @@ def getxyzs(path, ampcor_label, rwin, awin, wsamp, input_res, input_width, input
 	vect_utm_e	= float(ul_long) + columns * x_step;
 	
 	[map_utm_e,map_utm_n]	= scipy.meshgrid(vect_utm_e,vect_utm_n);
-	map_utm_n		= scipy.flipud(map_utm_n);
+	# map_utm_n		= scipy.flipud(map_utm_n);  whyj
 
 	cdir	= os.getcwd();
 	cdir	= cdir[cdir.rfind("/")+1:].strip();
 
 	column_utm_n	= map_utm_n.reshape(scipy.size(map_utm_n,0)*scipy.size(map_utm_n,1),1);
 	column_utm_e	= map_utm_e.reshape(scipy.size(map_utm_e,0)*scipy.size(map_utm_e,1),1);
-	column_dyg	= scipy.flipud(dyg).reshape(scipy.size(dyg,0)*scipy.size(dyg,1),1);
-	column_dxg	= scipy.flipud(dxg).reshape(scipy.size(dxg,0)*scipy.size(dxg,1),1);
-	column_snr	= scipy.flipud(snrg).reshape(scipy.size(snrg,0)*scipy.size(snrg,1),1);
-	column_c11      = scipy.flipud(sigxg).reshape(scipy.size(sigxg,0)*scipy.size(sigxg,1),1);
-	column_c22      = scipy.flipud(sigyg).reshape(scipy.size(sigyg,0)*scipy.size(sigyg,1),1);
+	# column_dyg	= scipy.flipud(dyg).reshape(scipy.size(dyg,0)*scipy.size(dyg,1),1);
+	# column_dxg	= scipy.flipud(dxg).reshape(scipy.size(dxg,0)*scipy.size(dxg,1),1);
+	# column_snr	= scipy.flipud(snrg).reshape(scipy.size(snrg,0)*scipy.size(snrg,1),1);
+	# column_c11      = scipy.flipud(sigxg).reshape(scipy.size(sigxg,0)*scipy.size(sigxg,1),1);
+	# column_c22      = scipy.flipud(sigyg).reshape(scipy.size(sigyg,0)*scipy.size(sigyg,1),1);
+	column_dyg	= dyg.reshape(scipy.size(dyg,0)*scipy.size(dyg,1),1);
+	column_dxg	= dxg.reshape(scipy.size(dxg,0)*scipy.size(dxg,1),1);
+	column_snr	= snrg.reshape(scipy.size(snrg,0)*scipy.size(snrg,1),1);
+	column_c11      = sigxg.reshape(scipy.size(sigxg,0)*scipy.size(sigxg,1),1);
+	column_c22      = sigyg.reshape(scipy.size(sigyg,0)*scipy.size(sigyg,1),1);
 	azimuth_off	= scipy.concatenate((column_utm_e,column_utm_n,column_dyg,column_snr,column_c11,column_c22),axis=1);
 	range_off	= scipy.concatenate((column_utm_e,column_utm_n,column_dxg,column_snr,column_c11,column_c22),axis=1);
 
