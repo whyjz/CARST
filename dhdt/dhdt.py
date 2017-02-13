@@ -18,7 +18,7 @@ import sys
 import os
 # sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
 sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
-from UtilDEM import SingleDEM
+from UtilRaster import SingleRaster
 from UtilConfig import ConfParams
 from UtilFit import TimeSeriesDEM
 
@@ -31,6 +31,7 @@ if len(sys.argv) < 2:
 inipath = sys.argv[1]
 ini = ConfParams(inipath)
 ini.ReadParam()
+ini.VerifyParam()
 demlist = ini.GetDEM()
 
 # ==== warp all DEMs using gdalwarp ====
@@ -54,7 +55,7 @@ slope, intercept, slope_err, intercept_err = dem_timeseries.Polyfit(**ini.regres
 
 # ==== Write to file ====
 
-dhdt_dem     = SingleDEM('/'.join([ini.result['output_dir'], ini.result['gtiff_slope']]))
+dhdt_dem     = SingleRaster('/'.join([ini.result['output_dir'], ini.result['gtiff_slope']]))
 dhdt_dem.Array2Raster(slope, demlist[0])
-dhdt_err_dem = SingleDEM('/'.join([ini.result['output_dir'], ini.result['gtiff_slope_err']]))
+dhdt_err_dem = SingleRaster('/'.join([ini.result['output_dir'], ini.result['gtiff_slope_err']]))
 dhdt_err_dem.Array2Raster(slope_err, demlist[0])

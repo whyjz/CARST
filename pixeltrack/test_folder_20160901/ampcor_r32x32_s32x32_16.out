@@ -1,0 +1,30 @@
+   
+    <<  Amplitude Cross Correlation of Complex or Real Data >>   
+   
+ Reading from: ampcor_r32x32_s32x32_16.in
+CAUTION - Requesting very large search window pull in
+Reference Window Size is                      32 sample pixels
+Number of Search Pixels is                    32 sample pixels
+The rule of thumb is that the search window pull in is at least 5
+pixels and is less than the reference window size divided by 5. 
+Suggested Number of Search Pixels is           5 sample pixels
+ 
+ 
+CAUTION - Requesting very large search window pull in
+Reference Window Size is                      32 line pixels
+Number of Search Pixels is                    32 line pixels
+The rule of thumb is that the search window pull in is at least 5
+pixels and is less than the reference window size divided by 5. 
+Suggested Number of Search Pixels is           5 line pixels
+ 
+ 
+Requested resolving shifts to 1/  128 of a pixel
+ 
+INFORMATION - you choose skips which are small for your window sizes
+Normally the skip size is bigger than the box size
+Across your skip is          8 but your window is         32
+Down   your skip is          8 but your window is         32
+This means that the image chips are larger than the separation between chips
+ 
+  
+ read error on record=        1088 status=        5002

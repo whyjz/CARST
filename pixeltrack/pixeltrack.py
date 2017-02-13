@@ -3,162 +3,237 @@
 
 import sys
 import os
-# sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
 sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
-import re
+# import re
 import subprocess
-# from UtilDEM import SingleDEM
-# from UtilConfig import ConfParams
+from UtilRaster import SingleRaster
+from UtilConfig import ConfParams, LS8MTL
 # from UtilFit import TimeSeriesDEM
-from splitAmpcor import splitAmpcor
+from splitAmpcor import splitAmpcor, ampcor_cmd
 from getxyzs import getxyzs
-import datetime
+from datetime import datetime
 
 if len(sys.argv) < 2:
     print('Error: Usage: pixeltrack.py config_file')
     sys.exit(1)
 
-params_path = sys.argv[1]
+# ==== Read ini file ====
 
+inipath = sys.argv[1]
+ini = ConfParams(inipath)
+ini.ReadParam()
+ini.VerifyParam()
+imgpairlist = ini.GetImgPair(delimiter=' ')
+
+# print(imgpairlist)
+# imgpairlist = pair_hash
+#    i.e. imgpair = [[<SingleRaster>, <SingleRaster>], [<SingleRaster>, <SingleRaster>], ...]
+#                            1st pair          ,          2nd pair         , ...
+
+# skip the date input first
+# skip sorting the first and the second (default is that the first is the earlier)
+# skip dealing with different projection
+# skip creating new folder based on its date
+
+# fixed parameters
+ini.gdalwarp['of'] = 'ENVI'
+ini.gdalwarp['ot'] = 'Float32'
+
+# print(imgpairlist[0][0].fpath)
+# print(imgpairlist[0][0].GetExtent())
+# print(imgpairlist[0][0].GetProj4())
+
+
+# ==== warp all DEMs using gdalwarp ====
+
+for imgpair in imgpairlist:
+    pair_dir = 'test_folder'
+    # ampcor_label = 'r32x32_s32x32'
+    # pair_label = '2016200_2016216'
+    # pair_dir = 'wv_carto'
+    ampcor_label = 'r{}x{}_s{}x{}'.format(ini.splitampcor['ref_x'], ini.splitampcor['ref_y'], ini.splitampcor['search_x'], ini.splitampcor['search_y'])
+    pair_label = 'wv_carto'
+    # skip giving ampcor_label at part 2
+    # skip giving pair_label
+    # skip pair_path -> pair_dir/pair_label/blabla...
+
+    if not ini.gdalwarp['te']:
+        extent = [img.GetExtent() for img in imgpair]
+        intersection = [max(extent[0][0], extent[1][0]), 
+                        min(extent[0][1], extent[1][1]), 
+                        min(extent[0][2], extent[1][2]), 
+                        max(extent[0][3], extent[1][3])]
+        intersection_te = [intersection[i] for i in [0, 3, 2, 1]]
+        ini.gdalwarp['te'] = '{:f} {:f} {:f} {:f}'.format(*intersection_te)
+    if not ini.gdalwarp['t_srs']:
+        ini.gdalwarp['t_srs'] = '"' + imgpair[0].GetProj4() + '"'
+    if False:
+        for img in imgpair:
+            img.Unify(ini.gdalwarp)
+
+
+        ampcor_label = splitAmpcor(imgpair[0].fpath, imgpair[1].fpath, pair_dir, **ini.splitampcor)
+        ampcor_cmd(ampcor_label, pair_dir, ini.splitampcor['nproc'])
+
+        # [Part 1]
+        # Options for processing with gnu parallel or as backgrounded processes
+        print("\n\"ampcor\" running as {:d} separate processes, this step may take several hours to complete...\n".format(ini.splitampcor['nproc']))
+        if ini.parallel['gnu_parallel']:
+            # For what ever reason, ampcor will not run unless it is executed from within the pair_path. 
+            # This is a slopy fix of just hopping in and out of the pair_path to run ampcor
+            cmd  = "cd {}; ".format(pair_dir)
+            if not ini.parallel['node_list']:
+                cmd += '''awk '{$NF=""; print $0}' run_amp.cmd | parallel --workdir $PWD'''
+            else:
+                nodefile = os.path.abspath(ini.parallel['node_list'])
+                print("Using node file " + nodefile)
+                cmd += '''awk '{$NF=""; print $0}' run_amp.cmd | parallel --sshloginfile ''' + nodefile + ''' --workdir $PWD'''
+            # print(cmd)
+            subprocess.call(cmd, shell=True)   # foreground running
+            # print("After all ampcor processes have completed, please rerun the landsatPX.py script.\n")
+            # sys.exit(0)
+        else:
+            # If not using gnu parallel, this block will gracefully exit the script and give instructions
+            # the next step
+            # cmd  = "cd {}; bash run_amp.cmd; cd -\n".format(pair_dir)
+            cmd  = "cd {}; bash run_amp.cmd".format(pair_dir)
+            # print(cmd)
+            subprocess.call(cmd, shell=True)   # background running 
+            # sys.exit(0)
+    else:
+        with open(pair_dir + "/amps_complete.txt") as ac:
+            amps_comp_num = ac.readlines()
+        
+        if len(amps_comp_num) < ini.splitampcor['nproc']:
+            print("\n***** It looks like not all ampcor processes have completed.")
+            print("     Skipping....")
+            sys.exit(1)
+
+        print("\n***** Offset files in \"" + pair_dir + "\" appear to have finished processing, composing results...\n")
+
+        # ==== cat all output to ampcor_label.off ====
+        # if os.path.exists(pair_path + "/ampcor_" + ampcor_label + ".off"):
+        #    print("\n***** \"" + pair_path + "/ampcor_" + ampcor_label + ".off\" already exists, assuming it contains all offsets for this run...\n");
+        # 
+        #
+        #
+        # else:
+
+        cat_cmd = "cat {}/ampcor_{}_*.off > {}/ampcor_{}.off".format(pair_dir, ampcor_label, pair_dir, ampcor_label)
+
+        # for i in range(1, ini.splitampcor['nproc'] + 1):
+        #     # cmd = "\nsed -i '/\*/d' " + pair_path + "/ampcor_" + ampcor_label + "_" + str(i) + ".off\n";
+        #     cat_cmd += pair_path + "/ampcor_" + ampcor_label + "_" + str(i) + ".off ";
+        #     subprocess.call(cmd, shell=True);
+
+        # cat_cmd += "> " + pair_path + "/ampcor_" + ampcor_label + ".off\n";
+        subprocess.call(cat_cmd, shell=True)
+        # ============================================
+
+
+        # get ref samples and lines number 
+        ref_samples = str(imgpair[0].GetRasterXSize())
+        # ref_samples = "";
+        ref_lines   = str(imgpair[0].GetRasterYSize())
+        # ref_lines   = "";
+
+        # infile = open(early_cut_path.replace(".img",".hdr"), "r");
+
+        # for line in infile:
+
+        #     if line.lower().find("samples") > -1:
+        #         ref_samples = line.split("=")[1].strip();
+
+        #     if line.lower().find("lines") > -1:
+        #         ref_lines = line.split("=")[1].strip();
+
+        # infile.close();
+        # print(ref_samples)
+        # print(ref_lines)
+        # ref_samples = '1698'
+        # ref_lines = '1087'
+
+        east_name      = pair_label + "_" + ampcor_label + "_eastxyz";
+        north_name     = pair_label + "_" + ampcor_label + "_northxyz";
+        mag_name       = pair_label + "_" + ampcor_label + "_mag";
+        east_xyz_path  = pair_dir + "/" + east_name + ".txt";
+        north_xyz_path = pair_dir + "/" + north_name + ".txt";
+
+        ul_x = str(intersection[0])
+        ul_y = str(intersection[1])
+        lr_x = str(intersection[2])
+        lr_y = str(intersection[3])
+
+        # if not os.path.exists(east_xyz_path):
+        #     print("\n***** \"getxyzs.py\" running to create E-W and N-S ASCII files with offsets (in m) in the third column and SNR in the 4th column\n \
+        #        ***** NOTE: E-W MAY BE FLIPPED DEPENDING ON HEMISPHERE, PLEASE CHECK MANUALLY...\n");
+        #     # This will generate a lot of warnings when using python 3...
+        #     # anyway, it's generating 20160803203709_20160718203706_r32x32_s32x32_eastxyz.txt
+        #     #                     and 20160803203709_20160718203706_r32x32_s32x32_northxyz.txt
+        getxyzs(pair_dir, ampcor_label, ini.splitampcor['step'], ini.splitampcor['step'], "1", "90", ref_samples, ref_lines, ul_x, ul_y, pair_label);
+
+        # else:
+        #     print("\n***** \"" + east_xyz_path + "\" already exists, assuming E-W and N-S ASCII offsets (in m) files created properly for this run...\n");
+
+        # east_grd_path  = pair_dir + "/" + east_name + ".grd"
+        # north_grd_path = pair_dir + "/" + north_name + ".grd"
+        # mag_grd_path   = pair_dir + "/" + mag_name + ".grd"
+        # snr_grd_path   = pair_dir + "/" + north_name.replace("north", "snr") + ".grd"
+        north_tif_path = pair_dir + "/" + north_name + ".tif"
+        east_tif_path = pair_dir + "/" + east_name + ".tif"
+
+
+        # R = "-R" + ul_x + "/" + lr_y + "/" + lr_x + "/" + ul_y + "r";
+        # R = '-R465067.5/6665272.5/490537.5/6681577.5r'
+
+        # RESOLUTION = 15
+
+        # if not os.path.exists(east_grd_path):
+        if True:
+            # print("\n***** Creating \"" + east_grd_path + "\" and \"" + north_grd_path + "\" using \"xyz2grd\"...\n");
+            # early_datetime = datetime.datetime(int(early_date[0:4]), int(early_date[4:6]), int(early_date[6:8]), \
+            #                    int(early_date[8:10]), int(early_date[10:12]), int(early_date[12:14]));
+            # later_datetime = datetime.datetime(int(later_date[0:4]), int(later_date[4:6]), int(later_date[6:8]), \
+            #                    int(later_date[8:10]), int(later_date[10:12]), int(later_date[12:14]));
+            # day_interval   = str((later_datetime - early_datetime).total_seconds() / (60. * 60. * 24.));
+            """
+            early_datetime = datetime(2016, 7, 18, 20, 37, 6)
+            later_datetime = datetime(2016, 8, 3, 20, 37, 9)
+            day_interval = '16.00003472222222'
+            """
+            # cmd  = "\nxyz2grd " + east_xyz_path + " " + R + " -G" + east_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
+            # cmd += "\nxyz2grd " + north_xyz_path + " " + R + " -G" + north_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
+            """
+            cmd += "\ngawk '{print $1\" \"$2\" \"$4}' " + north_xyz_path + " | xyz2grd " + R + " \
+                -G" + snr_grd_path + " -I" + str(ini.splitampcor['step'] * int(RESOLUTION)) + "=\n";
+            cmd += "\ngrdmath " + east_grd_path + " " + day_interval + " DIV --IO_NC4_CHUNK_SIZE=c = " + east_grd_path + "\n";
+            cmd += "\ngrdmath " + north_grd_path + " " + day_interval + " DIV --IO_NC4_CHUNK_SIZE=c = " + north_grd_path + "\n";
+            cmd += "\ngrdmath " + north_grd_path + " " + east_grd_path + " HYPOT --IO_NC4_CHUNK_SIZE=c = " + mag_grd_path + "\n";
+            subprocess.call(cmd, shell=True)
+            """
+            north_tif = SingleRaster(north_tif_path)
+            north_tif.XYZ2Raster(north_xyz_path, projection=imgpair[0].GetProjection())
+            east_tif = SingleRaster(east_tif_path)
+            east_tif.XYZ2Raster(east_xyz_path, projection=imgpair[0].GetProjection())
+
+
+            # please note that xxxxx_snrxyz.grd only counts the error from fitting a cross-correlation peak.
+            # it does not include the offset between ref image and search image, which is also can be a significant source of errors.
+            #
+            # The unit in mag, north, east is pixel/day.
+
+        # else:
+        #    print("\n***** \"" + east_grd_path + "\" already exists, assuming m/day velocity grids already made for this run...\n"); 
+                               
+               
+    # sys.exit(0)
+
+
+
+
+
+"""
 try:
-
-
-    # Read config files. Ready to be replaced by UtilConfig.
-    # =====================
-    '''
-    infile = open(params_path,"r");
-
-    while 1:
-        line = infile.readline();
-
-        if not line:
-            break;
-
-        line = line.strip();
-
-        name = "";
-        value = "";
-        elements = line.split("=");
-
-
-        if len(elements) < 2 or len(elements[0]) < 1 or len(elements[1]) < 1:
-            print("\n***** ERROR, parameter file line format is \"name = value\", \"" + line + "\" does not conform to this format\n");
-            sys.exit();
-
-        name = elements[0].strip();
-        value = elements[1].strip();
-        # print(name, value)
-        vars()[name] = value;
-        # locals()[name] = value
-
-    infile.close();
-    '''
-    # ======================
-    
-
-    # for test, all the parameters are given here.
-    # ========================================================
-    UTM_ZONE        = '5'
-    UTM_LETTER      = 'na'
-    BAND            = 'na' 
-    ICE             = 'na/na' 
-    ROCK            = 'na/na' 
-    IMAGE_DIR       = 'na/na'
-    METADATA_DIR    = './Landsat8_example/IMAGES'
-    PAIRS_DIR       = './Landsat8_example'
-    PROCESSORS      = '16'
-    RESOLUTION      = '15'
-    SATELLITE       = 'na'
-    SNR_CUTOFF      = 'na'
-    DEM             = 'na'
-    PREFILTER       = 'False'
-    REF_X           = '32'
-    REF_Y           = '32'
-    SEARCH_X        = '32'
-    SEARCH_Y        = '32'
-    STEP            = '8'
-    M_SCRIPTS_DIR   = 'na'
-    VEL_MAX         = 'na'
-    TOL             = 'na'
-    NUMDIF          = 'na'
-    SCALE           = 'na'
-    PAIRS           = './Landsat8_example/landsat8_2016_200_216.txt'
-    GNU_PARALLEL    = 'False'
-    NODE_LIST       = 'None'
-    # ========================================================
-    # UTM_ZONE        = '41'
-    # UTM_LETTER      = 'na'
-    # BAND            = 'na'
-    # ICE             = 'na/na'
-    # ROCK            = 'na/na'
-    # IMAGE_DIR       = 'na/na'
-    # METADATA_DIR    = '.'
-    # PAIRS_DIR       = '.'
-    # PROCESSORS      = '16'
-    # RESOLUTION      = '15'
-    # SATELLITE       = 'na'
-    # SNR_CUTOFF      = 'na'
-    # DEM             = 'na'
-    # PREFILTER       = 'False'
-    # REF_X           = '32'
-    # REF_Y           = '32'
-    # SEARCH_X        = '8'
-    # SEARCH_Y        = '8'
-    # STEP            = '4'
-    # M_SCRIPTS_DIR   = 'na'
-    # VEL_MAX         = 'na'
-    # TOL             = 'na'
-    # NUMDIF          = 'na'
-    # SCALE           = 'na'
-    # PAIRS           = './pairs.txt'
-    # GNU_PARALLEL    = 'False'
-    # NODE_LIST       = 'None'
-    # ========================================================
-
-    # ======== Check if PAIRS_DIR, METADATA_DIR, and PAIRS exist ========
-    if not os.path.exists(PAIRS_DIR):
-        print("\n***** ERROR: Pair directory specified (\"" + PAIRS_DIR + "\") not found, make sure full path is provided, exiting...\n");
-        sys.exit(1)
-
-    if not os.path.exists(METADATA_DIR):
-        print("\n***** ERROR: Metadata directory specified (\"" + METADATA_DIR + "\") not found, make sure full path is provided, exiting...\n");
-        sys.exit(1)
-
-    if not os.path.exists(PAIRS):
-        print("\n***** ERROR: Pair list \"" + PAIRS + "\" not found, make sure full path is provided, exiting...\n");
-    # ===================================================================
-
-    # ======== Load pairs. ========
-    # pairs_hash ==> {'./Landsat8_example/IMAGES/LC80630182016200LGN00_B8_yahtse.TIF ./Landsat8_example/IMAGES/LC80630182016216LGN00_B8_yahtse.TIF\n': './Landsat8_example/IMAGES/LC80630182016200LGN00_B8_yahtse.TIF ./Landsat8_example/IMAGES/LC80630182016216LGN00_B8_yahtse.TIF\n'}
-    # so strange. will change it.
-    pairs_hash = [];    
-
-    infile = open(PAIRS, "r");
-
-    for pair in infile:
-
-        if re.search("^\s*#", pair):
-            continue;
-
-        image1_path, image2_path = pair.split();
-
-        if not os.path.exists(image1_path):
-            print("\n***** WARNING: \"" + image1_path + "\" not found, make sure full path is provided, skipping corresponding pair...\n");
-            continue;
-
-        elif not os.path.exists(image2_path):
-            print("\n***** WARNING: \"" + image2_path + "\" not found, make sure full path is provided, skipping corresponding pair...\n");
-            continue;
-
-        pairs_hash.append([image1_path, image2_path])
-
-    infile.close();
-
-    if len(pairs_hash) == 0:
-        print("\n***** ERROR: No valid pairs found,  make sure correct paths were provided in \"" + PAIRS + "\", exiting...\n");
-        sys.exit(1)
-    # =================================
-
 
     for pair in pairs_hash:
 
@@ -289,83 +364,6 @@ try:
         later_cut_path = later_image_path[ : later_image_path.rfind(".")] + "_cut.img";
         # early_cut_path = './20160803203709_20160718203706/LC80630182016200LGN00_B8_yahtse_cut.img'
 
-        # ============= Get UTM Zone Number =============
-        cmd = "\ngdalinfo " + early_image_path + "\n";
-        pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
-        info = pipe.read();
-        pipe.close();
-        # print(info)
-        # print('-----')
-        # print(re.search("UTM\s*zone\s*",info))
-
-        # Convert byte literals to UTF string (compatible to python 3)
-        info = info.decode("utf-8")
-        zone1  = info[re.search("UTM\s*zone\s*",info).end(0) : re.search("UTM\s*zone\s*\d+",info).end(0)];
-        # zone1 = '7'   (UTM zone 7N)
-
-        cmd = "\ngdalinfo " + later_image_path + "\n";
-        pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
-        info = pipe.read();
-        pipe.close();
-
-        # Convert byte literals to UTF string (compatible to python 3)
-        info = info.decode("utf-8")
-        zone2  = info[re.search("UTM\s*zone\s*",info).end(0) : re.search("UTM\s*zone\s*\d+",info).end(0)];
-
-        if zone1 != UTM_ZONE:
-            cmd = "\ngdalwarp -t_srs '+proj=utm +zone=" + UTM_ZONE + " +north +datum=WGS84' -tr " + RESOLUTION + " " + RESOLUTION + " " + early_image_path + " " + pair_path + "/temp\n";
-            subprocess.call(cmd, shell=True);
-            os.rename(pair_path + "/temp", early_image_path);
-
-        if zone2 != UTM_ZONE:
-            cmd = "\ngdalwarp -t_srs '+proj=utm +zone=" + UTM_ZONE + " +north +datum=WGS84' -tr " + RESOLUTION + " " + RESOLUTION + " " + later_image_path + " " + pair_path + "/temp\n";
-            subprocess.call(cmd, shell=True);
-            os.rename(pair_path + "/temp", later_image_path);
-        # ===============================================
-
-        # ============= Get Extents used for cutting =============
-        cmd = "\ngdalinfo " + early_image_path + "\n";
-        pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
-        info = pipe.read();
-        pipe.close();
-        info = info.decode("utf-8")
-
-        ul_1_x = info[re.search("Upper Left\s*\(\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ul_1_y = info[re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        ur_1_x = info[re.search("Upper Right\s*\(\s*",info).end(0) : re.search("Upper Right\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ur_1_y = info[re.search("Upper Right\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Upper Right\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        lr_1_x = info[re.search("Lower Right\s*\(\s*",info).end(0) : re.search("Lower Right\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        lr_1_y = info[re.search("Lower Right\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Lower Right\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        ll_1_x = info[re.search("Lower Left\s*\(\s*",info).end(0) : re.search("Lower Left\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ll_1_y = info[re.search("Lower Left\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Lower Left\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-
-        cmd = "\ngdalinfo " + later_image_path + "\n";
-        pipe = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE).stdout;
-        info = pipe.read();
-        pipe.close();
-        info = info.decode("utf-8")
-
-        ul_2_x = info[re.search("Upper Left\s*\(\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ul_2_y = info[re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Upper Left\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        ur_2_x = info[re.search("Upper Right\s*\(\s*",info).end(0) : re.search("Upper Right\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ur_2_y = info[re.search("Upper Right\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Upper Right\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        lr_2_x = info[re.search("Lower Right\s*\(\s*",info).end(0) : re.search("Lower Right\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        lr_2_y = info[re.search("Lower Right\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Lower Right\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        ll_2_x = info[re.search("Lower Left\s*\(\s*",info).end(0) : re.search("Lower Left\s*\(\s*\-*\d+\.*\d*",info).end(0)];
-        ll_2_y = info[re.search("Lower Left\s*\(\s*\-*\d+\.*\d*,\s*",info).end(0) : re.search("Lower Left\s*\(\s*\-*\d+\.*\d*,\s*\-*\d+\.*\d*",info).end(0)];
-        # =========================================================
-
-
-        # Compute the total extent
-        ul_x = str(max([float(ul_1_x), float(ul_2_x)]));
-        ul_y = str(min([float(ul_1_y), float(ul_2_y)]));
-        lr_x = str(min([float(lr_1_x), float(lr_2_x)]));
-        lr_y = str(max([float(lr_1_y), float(lr_2_y)]));
-
-        early_cut_path = early_image_path[ : early_image_path.rfind(".")] + "_cut.img";
-        later_cut_path = later_image_path[ : later_image_path.rfind(".")] + "_cut.img";
-        # early_cut_path = './20160803203709_20160718203706/LC80630182016200LGN00_B8_yahtse_cut.img'
-
         # ========= Generate *_cut.img ==========
         if not os. path.exists(early_cut_path):
             cmd  = "\ngdal_translate -of ENVI -ot Float32 -projwin " + ul_x + " " + ul_y + " " + lr_x + " " + lr_y + " " + early_image_path + " " + early_cut_path + "\n";
@@ -379,9 +377,6 @@ try:
             print("\n***** ERROR: \"gdal_translate\" to cut images to common region unsuccessful skipping \"" + pair_label + "...\n");
         # =======================================
 
-        ampcor_label = "r" + REF_X + "x" + REF_Y + "_s" + SEARCH_X + "x" + SEARCH_Y;
-        # ampcor_label = 'r32x32_s32x32'
-
         # generate ampcor input using splitAmpcor.py
         if not os.path.exists(pair_path + "/ampcor_" + ampcor_label + "_1.in"):
             print("\nRunning \"splitAmpcor.py\" to create \"ampcor\" input files...\n");
@@ -394,44 +389,7 @@ try:
         if not os.path.exists(pair_path + "/ampcor_" + ampcor_label + "_1.off"):
 
             
-            # write something to run_amp.cmd
-            amp_file = open(pair_path+"/run_amp.cmd", 'w')
-            amps_complete = open(pair_path+"/amps_complete.txt", 'w')
-            amps_complete.close()
-            for i in range(1, int(PROCESSORS) + 1):
-                # there used to be a path issue and now fixed - WJ
-                amp_file.write("(ampcor " + "ampcor_" + ampcor_label + "_" + str(i) + ".in rdf > " + "ampcor_" + ampcor_label + "_" + str(i) + ".out; echo " + str(i) + " >> amps_complete.txt) &\n")
-            amp_file.close()        
-
-
-            # Options for processing with gnu parallel or as backgrounded processes
-            if GNU_PARALLEL == "True":
-                print("\n\"ampcor\" running as " + PROCESSORS + " separate processes, this step may take several hours to complete...\n");
-                # For what ever reason, ampcor will not run unless it is executed from within the pair_path. 
-                # This is a slopy fix of just hopping in and out of the pair_path to run ampcor
-                cmd  = "cd "+pair_path+"\n";
-                if NODE_LIST == "None":
-                    cmd += '''\nawk '{$NF=""; print $0}' run_amp.cmd | parallel --workdir $PWD\n''';
-                else:
-                    print("Using node file "+NODE_LIST)
-                    cmd += '''\nawk '{$NF=""; print $0}' run_amp.cmd | parallel --sshloginfile ''' + NODE_LIST + ''' --workdir $PWD\n''';
-                cmd += "cd ../\n";
-                subprocess.call(cmd, shell=True);
-                print("After all ampcor processes have completed, please rerun the landsatPX.py script.\n")
-                sys.exit(0)
-
-            # If not using gnu parallel, this try block will gracefully exit the script and give instructions
-            # the next step
-            elif GNU_PARALLEL == "False":
-                cmd  = "cd " + pair_path + "\n";
-                cmd += "bash run_amp.cmd\n";
-                cmd += "cd ../\n" 
-                subprocess.call(cmd, shell=True);
-
-                print("\n\"ampcor\" running as " + PROCESSORS + " separate processes, this step may take several hours to complete...\n");
-                print("After all ampcor processes have completed, please rerun the landsatPX.py script.\n")
-                sys.exit(0)
-                   
+                  
         # [Part 2] If the program detects xxxxxxx_1.off, it will think that ampcor has finished (by runnning run_amp.cmd).
         pair_done = True;
 
@@ -573,3 +531,4 @@ except IOError:
     print("*"*n + "*****")
     print(message)
     print("*"*n + "*****")
+"""

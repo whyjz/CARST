@@ -49,6 +49,7 @@ def findOffset(ref_hdr, search_hdr, resolution):
 			ref_utm_ul_y = info[7].replace(",","");
 
 	ref_hdr_file.close();
+	print(ref_utm_ul_x, ref_utm_ul_y)
 
 #	Read samples, lines, and upper-left coordinates from search hdr file
 
