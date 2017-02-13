@@ -37,8 +37,11 @@ class SingleRaster:
 				self.date = datetime.strptime(date, '%Y-%m-%d')
 			elif len(date) == 8:
 				self.date = datetime.strptime(date, '%Y%m%d')
+			elif len(date) == 7:
+				self.date = datetime.strptime(date, '%y%b%d')  # YYMMMDD
 			else:
-				raise ValueError("This format of date string is not currently supported. Please use YYYY-MM-DD or YYYYMMDD")
+				raise ValueError("This format of date string is not currently supported." +\
+				                 "Please use YYYY-MM-DD, YYYYMMDD, or YYMMMDD.")
 		elif type(date) is datetime:
 			self.date = date
 		elif date is None:
@@ -132,17 +135,18 @@ class SingleRaster:
 
 		ulx, uly, lrx, lry = self.GetExtent()
 		ulx, xres, xskew, uly, yskew, yres  = self.GetGeoTransform()
-		lrx += xres
-		lry += yres 
+		# print('xbound:', ulx, lrx, 'ybound:', uly, lry)
+		# if y > 220000:
+		# 	print(x, y, 'xbound:', ulx, lrx, 'ybound:', uly, lry)
 		if (ulx <= x < lrx) & (uly >= y > lry):
 			ds = gdal.Open(self.fpath)
 			px = int((x - ulx) / xres) # x pixel coor
 			py = int((y - uly) / yres) # y pixel coor
 			dsband = ds.GetRasterBand(band)
 			pixel_val = dsband.ReadAsArray(px, py, 1, 1)   # it numpy.array with shape of (1, 1)
-			return pixel_val[0]    # it's numpy.array with shape of (1,)
+			return float(pixel_val[0])
 		else:
-			return np.array([np.nan])
+			return np.nan
 
 	def ReadAsArray(self, band=1):
 
