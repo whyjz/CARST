@@ -1,10 +1,14 @@
 # Class: TimeSeriesDEM(np.ndarray)
+# Func: Resample_Array(UtilRaster.SingleRaster, UtilRaster.SingleRaster)
 # used for dhdt
 # by Whyjay Zheng, Jul 27 2016
-# last edit: Aug 17 2016
+# last edit: Jun 22 2017
 
 import numpy as np
 from datetime import datetime
+from shapely.geometry import Polygon
+from scipy.interpolate import interp2d
+import gc
 
 class TimeSeriesDEM(np.ndarray):
 
@@ -137,3 +141,35 @@ class TimeSeriesDEM(np.ndarray):
 				intercept_err[i] = np.sqrt(c[1, 1])
 
 		return slope.reshape(reg_size[:-1]), intercept.reshape(reg_size[:-1]), slope_err.reshape(reg_size[:-1]), intercept_err.reshape(reg_size[:-1])
+
+def Resample_Array(orig_dem, resamp_ref_dem):
+
+	"""
+	resample orig_dem using the extent and spacing provided by resamp_ref_dem
+	orig_dem: class UtilRaster.SingleRaster object
+	resamp_ref_dem: class UtilRaster.SingleRaster object
+	returns: an numpy array, which you can use the methods in UtilRaster to trasform it into a raster
+
+	Uses linear interpolation because it best represent flat ice surface.
+	-9999.0 (default nan in a Geotiff) is used to fill area outside the extent of orig_dem.
+
+	"""
+	o_ulx, o_uly, o_lrx, o_lry = orig_dem.GetExtent()
+	o_ulx, o_xres, o_xskew, o_uly, o_yskew, o_yres = orig_dem.GetGeoTransform()
+	orig_dem_extent = Polygon([(o_ulx, o_uly), (o_lrx, o_uly), (o_lrx, o_lry), (o_ulx, o_lry)])
+	ulx, uly, lrx, lry = resamp_ref_dem.GetExtent()
+	ulx, xres, xskew, uly, yskew, yres = resamp_ref_dem.GetGeoTransform()
+	resamp_ref_dem_extent = Polygon([(ulx, uly), (lrx, uly), (lrx, lry), (ulx, lry)])
+	if orig_dem_extent.intersects(resamp_ref_dem_extent):
+		x = np.linspace(o_ulx, o_lrx - o_xres, orig_dem.GetRasterXSize())
+		y = np.linspace(o_uly, o_lry - o_yres, orig_dem.GetRasterYSize())
+		z = orig_dem.ReadAsArray()
+		fun = interp2d(x, y, z, kind='linear', bounds_error=False, copy=False, fill_value=-9999.0)
+		xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
+		ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
+		znew = np.flipud(fun(xnew, ynew))    # I don't know why, but it seems f(xnew, ynew) is upside down.
+		del z
+		gc.collect()
+		return znew
+	else:
+		return np.ones_like(resamp_ref_dem.ReadAsArray()) * -9999.0
