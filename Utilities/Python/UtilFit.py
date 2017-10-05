@@ -8,6 +8,7 @@ import numpy as np
 from datetime import datetime
 from shapely.geometry import Polygon
 from scipy.interpolate import interp2d
+from scipy.interpolate import NearestNDInterpolator
 import gc
 
 class TimeSeriesDEM(np.ndarray):
@@ -142,7 +143,7 @@ class TimeSeriesDEM(np.ndarray):
 
 		return slope.reshape(reg_size[:-1]), intercept.reshape(reg_size[:-1]), slope_err.reshape(reg_size[:-1]), intercept_err.reshape(reg_size[:-1])
 
-def Resample_Array(orig_dem, resamp_ref_dem):
+def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 
 	"""
 	resample orig_dem using the extent and spacing provided by resamp_ref_dem
@@ -152,6 +153,8 @@ def Resample_Array(orig_dem, resamp_ref_dem):
 
 	Uses linear interpolation because it best represent flat ice surface.
 	-9999.0 (default nan in a Geotiff) is used to fill area outside the extent of orig_dem.
+
+	resamp_method: 'linear', 'cubic', 'quintic', 'nearest'
 
 	"""
 	o_ulx, o_uly, o_lrx, o_lry = orig_dem.GetExtent()
@@ -164,10 +167,22 @@ def Resample_Array(orig_dem, resamp_ref_dem):
 		x = np.linspace(o_ulx, o_lrx - o_xres, orig_dem.GetRasterXSize())
 		y = np.linspace(o_uly, o_lry - o_yres, orig_dem.GetRasterYSize())
 		z = orig_dem.ReadAsArray()
-		fun = interp2d(x, y, z, kind='linear', bounds_error=False, copy=False, fill_value=-9999.0)
-		xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
-		ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
-		znew = np.flipud(fun(xnew, ynew))    # I don't know why, but it seems f(xnew, ynew) is upside down.
+		if resamp_method == 'nearest':
+			print('go this way of nearest')
+			xx, yy = np.meshgrid(x, y)
+			points = np.stack((np.reshape(xx, xx.size), np.reshape(yy, yy.size)), axis=-1)
+			values = np.reshape(z, z.size)
+			fun = NearestNDInterpolator(points, values)
+			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
+			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
+			xxnew, yynew = np.meshgrid(xnew, ynew)
+			znew = fun(xxnew, yynew)    # if the image is big, this may take a long time (much longer than linear approach)
+		else:
+			print('go this way of interp2d')
+			fun = interp2d(x, y, z, kind=resamp_method, bounds_error=False, copy=False, fill_value=-9999.0)
+			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
+			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
+			znew = np.flipud(fun(xnew, ynew))    # I don't know why, but it seems f(xnew, ynew) is upside down.
 		del z
 		gc.collect()
 		return znew
