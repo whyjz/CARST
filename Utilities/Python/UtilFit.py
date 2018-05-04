@@ -168,7 +168,7 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 		y = np.linspace(o_uly, o_lry - o_yres, orig_dem.GetRasterYSize())
 		z = orig_dem.ReadAsArray()
 		if resamp_method == 'nearest':
-			print('go this way of nearest')
+			print('resampling method = nearest')
 			xx, yy = np.meshgrid(x, y)
 			points = np.stack((np.reshape(xx, xx.size), np.reshape(yy, yy.size)), axis=-1)
 			values = np.reshape(z, z.size)
@@ -178,7 +178,7 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 			xxnew, yynew = np.meshgrid(xnew, ynew)
 			znew = fun(xxnew, yynew)    # if the image is big, this may take a long time (much longer than linear approach)
 		else:
-			print('go this way of interp2d')
+			print('resampling method = interp2d - ' + resamp_method)
 			fun = interp2d(x, y, z, kind=resamp_method, bounds_error=False, copy=False, fill_value=-9999.0)
 			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
 			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
