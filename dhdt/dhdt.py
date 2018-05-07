@@ -23,7 +23,7 @@ from UtilFit import DemPile
 
 parser = ArgumentParser()
 parser.add_argument('config_file', help='Configuration file')
-parser.add_argument('-s', '--step', help='Do a single stpe', dest='step')
+parser.add_argument('-s', '--step', help='Do a single step', dest='step')
 args = parser.parse_args()
 
 # ==== Read ini file ====

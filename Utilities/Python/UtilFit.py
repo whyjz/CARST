@@ -80,6 +80,12 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 
 class DemPile(object):
 
+	"""
+	New class in replace of TimeSeriesDEM. It doesn't use nparray for avoiding huge memory consumption.
+	Instead, it uses a novel method for stacking all DEMs and saves them as a dict array (which is what 
+	is stored in the intermediate pickle file. 
+	"""
+
 	def __init__(self, picklepath=None, refgeo=None, refdate=None, dhdtprefix=None):
 		self.picklepath = picklepath
 		self.dhdtprefix = dhdtprefix
@@ -244,6 +250,8 @@ class DemPile(object):
 class TimeSeriesDEM(np.ndarray):
 
 	"""
+	DEPRECATED IN DHDT v1.0.
+
 	This class can include many DEMs (in UtilRaster.SingleRaster object) and then create a 3-D matrix.
 	each DEM is aligned along z-axis so that TimeSeriesDEM[m, n, :] would be the time series at pixel (m, n).
 	"""
