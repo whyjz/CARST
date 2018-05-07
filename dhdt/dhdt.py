@@ -3,6 +3,8 @@
 # Main dh/dt script
 # by Whyjay Zheng, Jul 27 2016
 # last edit: Aug 17 2016
+# Major rehaul: May 7, 2018
+# modified from the workflow of the FJL paper (Zheng et al, 2018)
 #
 # usage: python dhdt.py config_file
 #
@@ -12,50 +14,61 @@
 #
 # complete readme is at CARST/Doc/dhdt/README.rst
 
-
-import numpy as np
+from argparse import ArgumentParser
 import sys
 import os
-# sys.path.insert(0, os.path.abspath('../Utilities/Python'))        # for all modules
 sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
-from UtilRaster import SingleRaster
 from UtilConfig import ConfParams
-from UtilFit import TimeSeriesDEM
+from UtilFit import DemPile
 
-if len(sys.argv) < 2:
-	print('Error: Usage: dhdt.py config_file')
-	sys.exit(1)
+parser = ArgumentParser()
+parser.add_argument('config_file', help='Configuration file')
+parser.add_argument('-s', '--step', help='Do a single step', dest='step')
+args = parser.parse_args()
 
-# ==== Read ini file and get DEM object list ====
+# ==== Read ini file ====
 
-inipath = sys.argv[1]
+inipath = args.config_file
 ini = ConfParams(inipath)
 ini.ReadParam()
 ini.VerifyParam()
-demlist = ini.GetDEM()
 
-# ==== warp all DEMs using gdalwarp ====
+# ==== Create a DemPile object and load the config file into the object ====
 
-for dem in demlist:
-	dem.Unify(ini.gdalwarp)
+a = DemPile()
+a.ReadConfig(ini)
 
-# ==== Complie DEM time series (including data, time, and variance) ====
+# ==== Run main processes ====
 
-dem_timeseries = TimeSeriesDEM(demlist[0])
-for i in range(1, len(demlist)):
-	print('Add DEM: ' + demlist[i].fpath)
-	dem_timeseries = dem_timeseries.AddDEM(demlist[i])
+if args.step is None:
+	a.InitTS()
+	a.PileUp()
+	a.DumpPickle()
+	a.Polyfit()
+	a.Fitdata2File()
+elif args.step == 'stack':
+	a.InitTS()
+	a.PileUp()
+	a.DumpPickle()
+elif args.step == 'dhdt':
+	a.LoadPickle()
+	a.Polyfit()
+	a.Fitdata2File()
+else:
+	print('Wrong Way!')
 
-# ==== Weighted regression ====
 
-dem_timeseries.Date2DayDelta()
-dem_timeseries.SetWeight()
-print("Start Polyfit; pixel number = " + str(dem_timeseries.shape[0] * dem_timeseries.shape[1]))
-slope, intercept, slope_err, intercept_err = dem_timeseries.Polyfit(**ini.regression)
+# ==== Codes for test ====
 
-# ==== Write to file ====
-
-dhdt_dem     = SingleRaster('/'.join([ini.result['output_dir'], ini.result['gtiff_slope']]))
-dhdt_dem.Array2Raster(slope, demlist[0])
-dhdt_err_dem = SingleRaster('/'.join([ini.result['output_dir'], ini.result['gtiff_slope_err']]))
-dhdt_err_dem.Array2Raster(slope_err, demlist[0])
+# import sys
+# sys.path.insert(0, '/data/whyj/Projects/Github/CARST/Utilities/Python/')
+# from UtilRaster import SingleRaster
+# from UtilConfig import ConfParams
+# from UtilFit import DemPile
+# inipath = 'defaults.ini'
+# ini = ConfParams(inipath)
+# ini.ReadParam()
+# ini.VerifyParam()
+# demlist = ini.GetDEM()
+# a = DemPile()
+# a.ReadConfig(ini)
