@@ -6,3 +6,5 @@
 pixeltrack/Landsat8_example/20160803203709_20160718203706/*
 pixeltrack/test_folder
 other_process/log_getUncertaintyDEM_grdtrack_output.xyz
+dhdt/Demo_DEMs/HookerFJL_10m_dhdt*
+dhdt/Demo_DEMs/refgeo_10m_TSpickle.p
