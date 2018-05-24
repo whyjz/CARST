@@ -11,6 +11,7 @@ from datetime import datetime
 from shapely.geometry import Polygon
 from scipy.interpolate import interp2d
 from scipy.interpolate import NearestNDInterpolator
+from scipy.interpolate import griddata
 import gc
 from UtilRaster import SingleRaster
 import pickle
@@ -50,6 +51,7 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 		x = np.linspace(o_ulx, o_lrx - o_xres, orig_dem.GetRasterXSize())
 		y = np.linspace(o_uly, o_lry - o_yres, orig_dem.GetRasterYSize())
 		z = orig_dem.ReadAsArray()
+		# z[z == orig_dem.GetNoDataValue()] = np.nan    # this line probably needs improvement
 		if resamp_method == 'nearest':
 			print('resampling method = nearest')
 			xx, yy = np.meshgrid(x, y)
@@ -60,12 +62,30 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
 			xxnew, yynew = np.meshgrid(xnew, ynew)
 			znew = fun(xxnew, yynew)    # if the image is big, this may take a long time (much longer than linear approach)
-		else:
+		elif resamp_method == 'linear':
+			nan_value = orig_dem.GetNoDataValue()
 			print('resampling method = interp2d - ' + resamp_method)
-			fun = interp2d(x, y, z, kind=resamp_method, bounds_error=False, copy=False, fill_value=-9999.0)
+			fun = interp2d(x, y, z, kind=resamp_method, bounds_error=False, copy=False, fill_value=nan_value)
 			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
 			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
 			znew = np.flipud(fun(xnew, ynew))    # I don't know why, but it seems f(xnew, ynew) is upside down.
+			fun2 = interp2d(x, y, z != nan_value, kind=resamp_method, bounds_error=False, copy=False, fill_value=0)
+			zmask = np.flipud(fun2(xnew, ynew))
+			znew[zmask <= 0.999] = nan_value
+		else:
+			# This is deprecated...
+			print('resampling method = griddata - ' + resamp_method)
+			xx, yy = np.meshgrid(x, y)
+			xx = xx.ravel()
+			yy = yy.ravel()
+			zz = z.ravel()
+			realdata_pos = zz != orig_dem.GetNoDataValue()
+			xx = xx[realdata_pos]
+			yy = yy[realdata_pos]
+			zz = zz[realdata_pos]
+			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
+			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
+			znew = griddata((xx, yy), zz, (xnew[None,:], ynew[:,None]), method='linear')
 		del z
 		gc.collect()
 		return znew
@@ -99,6 +119,7 @@ class DemPile(object):
 		if refgeo is not None:
 			self.refgeomask = refgeo.ReadAsArray().astype(bool)
 		self.fitdata = {'slope': [], 'slope_err': [], 'residual': [], 'count': []}
+		self.maskparam = {'max_uncertainty': 9999}
 
 	def AddDEM(self, dems):
 		# ==== Add DEM object list ====
@@ -128,6 +149,10 @@ class DemPile(object):
 	def SetRefDate(self, datestr):
 		self.refdate = datetime.strptime(datestr, '%Y-%m-%d')
 
+	def SetMaskParam(self, ini):
+		if 'max_uncertainty' in ini.settings:
+			self.maskparam['max_uncertainty'] = float(ini.settings['max_uncertainty'])
+
 	def InitTS(self):
 		# ==== Prepare the reference geometry ====
 		refgeo_Ysize = self.refgeo.GetRasterYSize()
@@ -142,20 +167,24 @@ class DemPile(object):
 		self.SortByDate()
 		self.SetRefGeo(ini.refgeometry['gtiff'])
 		self.SetRefDate(ini.settings['refdate'])
+		self.SetMaskParam(ini)
 
 	@timeit
 	def PileUp(self):
 		# ==== Start to read every DEM and save it to our final array ====
 		for i in range(len(self.dems)):
 			print('{}) {}'.format(i + 1, os.path.basename(self.dems[i].fpath) ))
-			datedelta = self.dems[i].date - self.refdate
-			znew = Resample_Array(self.dems[i], self.refgeo)
-			znew_mask = np.logical_and(znew > 0, self.refgeomask)
-			fill_idx = np.where(znew_mask)
-			for m,n in zip(fill_idx[0], fill_idx[1]):
-				self.ts[m][n]['date'] += [datedelta.days]
-				self.ts[m][n]['uncertainty'] += [self.dems[i].uncertainty]
-				self.ts[m][n]['value'] += [znew[m, n]]
+			if self.dems[i].uncertainty <= self.maskparam['max_uncertainty']:
+				datedelta = self.dems[i].date - self.refdate
+				znew = Resample_Array(self.dems[i], self.refgeo, resamp_method='linear')
+				znew_mask = np.logical_and(znew > 0, self.refgeomask)
+				fill_idx = np.where(znew_mask)
+				for m,n in zip(fill_idx[0], fill_idx[1]):
+					self.ts[m][n]['date'] += [datedelta.days]
+					self.ts[m][n]['uncertainty'] += [self.dems[i].uncertainty]
+					self.ts[m][n]['value'] += [znew[m, n]]
+			else:
+				print("This one won't be piled up because its uncertainty ({}) exceeds the maximum uncertainty allowed ({}).".format(self.dems[i].uncertainty, self.maskparam['max_uncertainty']))
 
 	def DumpPickle(self):
 		pickle.dump(self.ts, open(self.picklepath, "wb"))
@@ -193,7 +222,9 @@ class DemPile(object):
 					# 		_ = uncertainty.pop(i)
 					# 		_ = value.pop(i)
 					# self.fitdata['count'][m, n] = len(date)
-					if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 200):
+
+					# Whyjay: May 10, 2018: cancelled the min date span (date[-1] - date[0] > 0), previously > 200
+					if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 0):
 						w = [1 / k for k in uncertainty]
 						case = 0
 						if len(date) == 4:
