@@ -21,13 +21,13 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath('../Utilities/v0_2'))
-from UtilDEM import SingleDEM
+sys.path.insert(0, os.path.abspath('../Utilities/Python'))
+from UtilRaster import SingleRaster
 from UtilXYZ import XYZFile
 from UtilConfig import CsvTable
 
 def getUncertaintyDEM(demfpath, pointfilepath):
-	dem = SingleDEM(demfpath)
+	dem = SingleRaster(demfpath)
 	xyzfile_output = dem.GetPointsFromXYZ(pointfilepath)
 	xyz = XYZFile(xyzfile_output, pointfilepath, demfpath)
 	xyz.Read()
