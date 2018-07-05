@@ -253,7 +253,7 @@ class DemPile(object):
 		if refgeo is not None:
 			self.refgeomask = refgeo.ReadAsArray().astype(bool)
 		self.fitdata = {'slope': [], 'slope_err': [], 'residual': [], 'count': []}
-		self.maskparam = {'max_uncertainty': 9999}
+		self.maskparam = {'max_uncertainty': 9999, 'min_time_span': 0}
 
 	def AddDEM(self, dems):
 		# ==== Add DEM object list ====
@@ -286,6 +286,8 @@ class DemPile(object):
 	def SetMaskParam(self, ini):
 		if 'max_uncertainty' in ini.settings:
 			self.maskparam['max_uncertainty'] = float(ini.settings['max_uncertainty'])
+		if 'min_time_span' in ini.settings:
+			self.maskparam['min_time_span'] = float(ini.settings['min_time_span'])
 
 	def InitTS(self):
 		# ==== Prepare the reference geometry ====
@@ -346,28 +348,29 @@ class DemPile(object):
 				date = np.array(self.ts[m][n]['date'])
 				uncertainty = np.array(self.ts[m][n]['uncertainty'])
 				value = np.array(self.ts[m][n]['value'])
-					# pin_value = pin_dem_array[m ,n]
-					# pin_date = pin_dem_date_array[m, n]
-					# date, uncertainty, value = filter_by_slope(date, uncertainty, value, pin_date, pin_value)
-					# date, uncertainty, value = filter_by_redundancy(date, uncertainty, value)
+				# pin_value = pin_dem_array[m ,n]
+				# pin_date = pin_dem_date_array[m, n]
+				# date, uncertainty, value = filter_by_slope(date, uncertainty, value, pin_date, pin_value)
+				# date, uncertainty, value = filter_by_redundancy(date, uncertainty, value)
 
-					# slope_ref = [(value[i] - pin_value) / float(date[i] - pin_date) * 365.25 for i in range(len(value))]
-					# for i in reversed(range(len(slope_ref))):
-					# 	if (slope_ref[i] > dhdt_limit_upper) or (slope_ref[i] < dhdt_limit_lower):
-					# 		_ = date.pop(i)
-					# 		_ = uncertainty.pop(i)
-					# 		_ = value.pop(i)
-					# self.fitdata['count'][m, n] = len(date)
+				# slope_ref = [(value[i] - pin_value) / float(date[i] - pin_date) * 365.25 for i in range(len(value))]
+				# for i in reversed(range(len(slope_ref))):
+				# 	if (slope_ref[i] > dhdt_limit_upper) or (slope_ref[i] < dhdt_limit_lower):
+				# 		_ = date.pop(i)
+				# 		_ = uncertainty.pop(i)
+				# 		_ = value.pop(i)
+				# self.fitdata['count'][m, n] = len(date)
 
-					# Whyjay: May 10, 2018: cancelled the min date span (date[-1] - date[0] > 0), previously > 200
-					# if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 0):
-				slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty)
-				# if slope > 10:
-				# 	print(date, value, uncertainty)
-				self.fitdata['slope'][m, n] = slope
-				self.fitdata['slope_err'][m, n] = slope_err
-				self.fitdata['residual'][m, n] = residual
-				self.fitdata['count'][m, n] = count
+				# Whyjay: May 10, 2018: cancelled the min date span (date[-1] - date[0] > 0), previously > 200
+				# if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 0):
+				if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
+					slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty)
+					if residual > 100:
+						print(date, value, uncertainty)
+					self.fitdata['slope'][m, n] = slope
+					self.fitdata['slope_err'][m, n] = slope_err
+					self.fitdata['residual'][m, n] = residual
+					self.fitdata['count'][m, n] = count
 				# else:
 					# self.fitdata['count'] = len(ref_dem_TS[m][n]['date'])
 					# elif (date[-1] - date[0] > 0):

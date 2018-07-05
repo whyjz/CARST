@@ -14,13 +14,14 @@ Required Platform and Software
 
 dh/dt **[v1.0]**:
 
-- All scripts are pythonized, i.e. it should be run on any Python-supported platforms (e.g. Windows, Linux).
 - python, with the following modules installed 
     - numpy 
     - scipy
     - matplotlib
     - shapely
     - gdal
+
+- All scripts are pythonized, i.e. it should work fine on any Python-supported platforms (e.g. Windows, Linux).
 
 pixel tracking **[v0.2]**:
 
