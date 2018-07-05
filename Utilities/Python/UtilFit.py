@@ -5,12 +5,14 @@
 # last edit: Jun 22 2017
 
 import numpy as np
+from numpy.linalg import inv
 import os
 import sys
 from datetime import datetime
 from shapely.geometry import Polygon
 from scipy.interpolate import interp2d
 from scipy.interpolate import NearestNDInterpolator
+from scipy.interpolate import griddata
 import gc
 from UtilRaster import SingleRaster
 import pickle
@@ -50,6 +52,7 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 		x = np.linspace(o_ulx, o_lrx - o_xres, orig_dem.GetRasterXSize())
 		y = np.linspace(o_uly, o_lry - o_yres, orig_dem.GetRasterYSize())
 		z = orig_dem.ReadAsArray()
+		# z[z == orig_dem.GetNoDataValue()] = np.nan    # this line probably needs improvement
 		if resamp_method == 'nearest':
 			print('resampling method = nearest')
 			xx, yy = np.meshgrid(x, y)
@@ -60,19 +63,170 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
 			xxnew, yynew = np.meshgrid(xnew, ynew)
 			znew = fun(xxnew, yynew)    # if the image is big, this may take a long time (much longer than linear approach)
-		else:
+		elif resamp_method == 'linear':
+			nan_value = orig_dem.GetNoDataValue()
 			print('resampling method = interp2d - ' + resamp_method)
-			fun = interp2d(x, y, z, kind=resamp_method, bounds_error=False, copy=False, fill_value=-9999.0)
+			fun = interp2d(x, y, z, kind=resamp_method, bounds_error=False, copy=False, fill_value=nan_value)
 			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
 			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
 			znew = np.flipud(fun(xnew, ynew))    # I don't know why, but it seems f(xnew, ynew) is upside down.
+			fun2 = interp2d(x, y, z != nan_value, kind=resamp_method, bounds_error=False, copy=False, fill_value=0)
+			zmask = np.flipud(fun2(xnew, ynew))
+			znew[zmask <= 0.999] = nan_value
+		else:
+			# This is deprecated...
+			print('resampling method = griddata - ' + resamp_method)
+			xx, yy = np.meshgrid(x, y)
+			xx = xx.ravel()
+			yy = yy.ravel()
+			zz = z.ravel()
+			realdata_pos = zz != orig_dem.GetNoDataValue()
+			xx = xx[realdata_pos]
+			yy = yy[realdata_pos]
+			zz = zz[realdata_pos]
+			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
+			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
+			znew = griddata((xx, yy), zz, (xnew[None,:], ynew[:,None]), method='linear')
 		del z
 		gc.collect()
 		return znew
 	else:
 		return np.ones_like(resamp_ref_dem.ReadAsArray()) * -9999.0
 
+def EVMD(y, threshold=6):
+	validated_value = None
+	if y.size <= 1:
+		exitstate = y.size
+	else:
+		exitstate = 1
+		for i in range(y.size - 1):
+			comparison = y[i+1:] - y[i]
+			if any(abs(comparison) < threshold):
+				validated_value = y[i]
+				exitstate = -10
+				break
+			else:
+				exitstate += 1
+	return exitstate, validated_value
 
+def EVMD_idx(y, validated_value, threshold=6):
+	validated_range = [validated_value - threshold, validated_value + threshold]
+	idx = np.zeros_like(y, dtype=bool)
+	for i in range(y.size):
+		if validated_range[0] <= y[i] <= validated_range[1]:
+			idx[i] = True
+			tmp = np.append(validated_range, [y[i] - threshold, y[i] + threshold])
+			validated_range = [min(tmp), max(tmp)]
+	return idx
+
+def wlr_corefun(x, y, ye):
+	# wlr = weighted linear regression.
+	exitstate, validated_value = EVMD(y, threshold=6)
+	if exitstate >= 0 or (max(x) - min(x)) < 1:
+		slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
+		return slope, slope_err, resid, count
+	else:
+		# if x.size == 3:
+		# print(x, y, ye)
+		idx = EVMD_idx(y, validated_value, threshold=6)
+		if sum(idx) >= 3:
+			x = x[idx]
+			y = y[idx]
+			ye = ye[idx]
+			w     = [1 / k for k in ye]
+			G     = np.vstack([x, np.ones(x.size)]).T
+			W     = np.diag(w)
+			Gw    = W @ G
+			yw    = W @ y.T                          # assuming y is a 1-by-N array
+			cov_m =     inv(Gw.T @ Gw)               # covariance matrix
+			p     =     inv(Gw.T @ Gw) @ Gw.T @ yw   # model coefficients
+			H     = G @ inv(Gw.T @ Gw) @ Gw.T @ W    # projection matrix
+			h     = np.diag(H)                       # leverage
+			y_est = np.polyval(p, x)                 # the estimate of y
+			ri2   = (y - y_est) ** 2
+			resid = np.sum(ri2)                      # sum of squared error
+			error =  np.sqrt(cov_m[0, 0])
+			p_num = 2                                # how many coefficients we want (in this case, 2 comes from y = a + bx)
+			mse   = resid / (x.size - p_num)         # mean squared error
+			slope = p[0] * 365.25
+			slope_err = np.sqrt(cov_m[0, 0]) * 365.25
+			count = x.size
+			# if resid > 100000:
+			# 	print(x,y,ye,cookd,goodpoint)
+			return slope, slope_err, resid, count
+		else:
+			slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
+			return slope, slope_err, resid, count
+
+
+		# ============ Using Cook's Distance ============
+		# cookd     = ri2 / (p_num * mse) * (h / (1 - h) ** 2)    # Cook's Distance
+		# goodpoint = cookd < 4 / x.size                          # Bollen, Kenneth A.; Jackman, Robert W. (1990) (see wikipedia)
+		# # xnew = x[goodpoint]
+		# # ynew = y[goodpoint]
+		# # yenew = ye[goodpoint]
+		# # wnew = [1 / k for k in yenew]
+		# if np.all(goodpoint):
+		# 	slope = p[0] * 365.25
+		# 	slope_err = np.sqrt(cov_m[0, 0]) * 365.25
+		# 	count = x.size
+		# 	if resid > 100000:
+		# 		print(x,y,ye,cookd,goodpoint)
+		# 	return slope, slope_err, resid, count
+		# else:
+		# 	xnew = x[goodpoint]
+		# 	ynew = y[goodpoint]
+		# 	yenew = ye[goodpoint]
+		# 	return wlr_corefun(xnew, ynew, yenew)
+
+	# =========== Old function ===========
+	# if xnew.size > 4:
+	# 	p, c            = np.polyfit(xnew, ynew, 1, w=wnew, cov=True)
+	# 	_, res, _, _, _ = np.polyfit(xnew, ynew, 1, w=wnew, full=True)
+	# 	residual = np.sum((np.polyval(p, xnew) - ynew) ** 2)
+	# 	cov_m = c * (len(w) - 4) / res
+	# 	error =  np.sqrt(cov_m[0, 0])
+	# 	slope = p[0] * 365.25
+	# 	slope_err = np.sqrt(cov_m[0, 0]) * 365.25
+	# else:
+	# 	error = -9999.0
+	# 	slope = -9999.0
+	# 	slope_err = -9999.0
+
+	# case = 0
+	# w = [1 / k for k in ye]
+	# if len(x) == 4:
+	# 	case = 1
+	# 	# This is to avoid dividing by zero when N = 4 and to give us a better error estimate
+	# 	x  = np.append(x,   x[-1])
+	# 	y  = np.append(y,   y[-1])
+	# 	ye = np.append(ye, ye[-1])
+	# 	w  = np.append(w, sys.float_info.epsilon)
+	# elif len(x) == 3:
+	# 	case = 2
+	# 	# This is to avoid negative Cd^2 when N = 3 and to give us a better error estimate
+	# 	x  = np.append(x,  [x[-1],  x[-1]])
+	# 	y  = np.append(y,  [y[-1],  y[-1]])
+	# 	ye = np.append(ye, [ye[-1], ye[-1]])
+	# 	w  = np.append(w,  [sys.float_info.epsilon, sys.float_info.epsilon])
+	# p, c            = np.polyfit(x, y, 1, w=w, cov=True)
+	# _, res, _, _, _ = np.polyfit(x, y, 1, w=w, full=True)
+	# # where c is the covariance matrix of p -> c[0, 0] is the variance estimate of the slope.
+	# # what we want is ({G_w}^T G_w)^{-1}, which is equal to c * (N - m - 2) / res
+	# cov_m = c * (len(w) - 4) / res
+	# slope = p[0] * 365.25
+	# slope_err = np.sqrt(cov_m[0, 0]) * 365.25
+	# # slope_error_arr[m, n] = np.sqrt(c[0, 0]) * 365.25
+	# # ./point_TS_ver2-2_linreg.py:^^^^^^^^: RuntimeWarning: invalid value encountered in sqrt
+	# # /data/whyj/Software/anaconda3/lib/python3.5/site-packages/numpy/lib/polynomial.py:606: RuntimeWarning: divide by zero encountered in true_divide
+	# # fac = resids / (len(x) - order - 2.0)
+	# if case == 0:
+	# 	residual = np.sum((np.polyval(p, x) - y) ** 2)
+	# elif case == 1:
+	# 	residual = np.sum((np.polyval(p, x[:-1]) - y[:-1]) ** 2)
+	# elif case == 2:
+	# 	residual = np.sum((np.polyval(p, x[:-2]) - y[:-2]) ** 2)
+	# return slope, slope_err, residual
 
 
 
@@ -99,6 +253,7 @@ class DemPile(object):
 		if refgeo is not None:
 			self.refgeomask = refgeo.ReadAsArray().astype(bool)
 		self.fitdata = {'slope': [], 'slope_err': [], 'residual': [], 'count': []}
+		self.maskparam = {'max_uncertainty': 9999, 'min_time_span': 0}
 
 	def AddDEM(self, dems):
 		# ==== Add DEM object list ====
@@ -128,6 +283,12 @@ class DemPile(object):
 	def SetRefDate(self, datestr):
 		self.refdate = datetime.strptime(datestr, '%Y-%m-%d')
 
+	def SetMaskParam(self, ini):
+		if 'max_uncertainty' in ini.settings:
+			self.maskparam['max_uncertainty'] = float(ini.settings['max_uncertainty'])
+		if 'min_time_span' in ini.settings:
+			self.maskparam['min_time_span'] = float(ini.settings['min_time_span'])
+
 	def InitTS(self):
 		# ==== Prepare the reference geometry ====
 		refgeo_Ysize = self.refgeo.GetRasterYSize()
@@ -142,20 +303,24 @@ class DemPile(object):
 		self.SortByDate()
 		self.SetRefGeo(ini.refgeometry['gtiff'])
 		self.SetRefDate(ini.settings['refdate'])
+		self.SetMaskParam(ini)
 
 	@timeit
 	def PileUp(self):
 		# ==== Start to read every DEM and save it to our final array ====
 		for i in range(len(self.dems)):
 			print('{}) {}'.format(i + 1, os.path.basename(self.dems[i].fpath) ))
-			datedelta = self.dems[i].date - self.refdate
-			znew = Resample_Array(self.dems[i], self.refgeo)
-			znew_mask = np.logical_and(znew > 0, self.refgeomask)
-			fill_idx = np.where(znew_mask)
-			for m,n in zip(fill_idx[0], fill_idx[1]):
-				self.ts[m][n]['date'] += [datedelta.days]
-				self.ts[m][n]['uncertainty'] += [self.dems[i].uncertainty]
-				self.ts[m][n]['value'] += [znew[m, n]]
+			if self.dems[i].uncertainty <= self.maskparam['max_uncertainty']:
+				datedelta = self.dems[i].date - self.refdate
+				znew = Resample_Array(self.dems[i], self.refgeo, resamp_method='linear')
+				znew_mask = np.logical_and(znew > 0, self.refgeomask)
+				fill_idx = np.where(znew_mask)
+				for m,n in zip(fill_idx[0], fill_idx[1]):
+					self.ts[m][n]['date'] += [datedelta.days]
+					self.ts[m][n]['uncertainty'] += [self.dems[i].uncertainty]
+					self.ts[m][n]['value'] += [znew[m, n]]
+			else:
+				print("This one won't be piled up because its uncertainty ({}) exceeds the maximum uncertainty allowed ({}).".format(self.dems[i].uncertainty, self.maskparam['max_uncertainty']))
 
 	def DumpPickle(self):
 		pickle.dump(self.ts, open(self.picklepath, "wb"))
@@ -169,70 +334,48 @@ class DemPile(object):
 		self.fitdata['slope']     = np.ones_like(self.ts, dtype=float) * -9999
 		self.fitdata['slope_err'] = np.ones_like(self.ts, dtype=float) * -9999
 		self.fitdata['residual']  = np.ones_like(self.ts, dtype=float) * -9999
-		self.fitdata['count']     = np.zeros_like(self.ts, dtype=float)
+		self.fitdata['count']     = np.ones_like(self.ts, dtype=float) * -9999
 		# ==== Weighted regression ====
 		print('m total: ', len(self.ts))
 		for m in range(len(self.ts)):
+			# if m < 600:
+			# 	continue
 			if m % 100 == 0:
 				print(m)
 			for n in range(len(self.ts[0])):
-				self.fitdata['count'][m, n] = len(self.ts[m][n]['date'])
-				if len(self.ts[m][n]['date']) >= 3:
-					date = np.array(self.ts[m][n]['date'])
-					uncertainty = np.array(self.ts[m][n]['uncertainty'])
-					value = np.array(self.ts[m][n]['value'])
-					# pin_value = pin_dem_array[m ,n]
-					# pin_date = pin_dem_date_array[m, n]
-					# date, uncertainty, value = filter_by_slope(date, uncertainty, value, pin_date, pin_value)
-					# date, uncertainty, value = filter_by_redundancy(date, uncertainty, value)
+				# self.fitdata['count'][m, n] = len(self.ts[m][n]['date'])
+				# if len(self.ts[m][n]['date']) >= 3:
+				date = np.array(self.ts[m][n]['date'])
+				uncertainty = np.array(self.ts[m][n]['uncertainty'])
+				value = np.array(self.ts[m][n]['value'])
+				# pin_value = pin_dem_array[m ,n]
+				# pin_date = pin_dem_date_array[m, n]
+				# date, uncertainty, value = filter_by_slope(date, uncertainty, value, pin_date, pin_value)
+				# date, uncertainty, value = filter_by_redundancy(date, uncertainty, value)
 
-					# slope_ref = [(value[i] - pin_value) / float(date[i] - pin_date) * 365.25 for i in range(len(value))]
-					# for i in reversed(range(len(slope_ref))):
-					# 	if (slope_ref[i] > dhdt_limit_upper) or (slope_ref[i] < dhdt_limit_lower):
-					# 		_ = date.pop(i)
-					# 		_ = uncertainty.pop(i)
-					# 		_ = value.pop(i)
-					# self.fitdata['count'][m, n] = len(date)
-					if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 200):
-						w = [1 / k for k in uncertainty]
-						case = 0
-						if len(date) == 4:
-							case = 1
-							# This is to avoid dividing by zero when N = 4 and to give us a better error estimate
-							date = np.append(date, date[-1])
-							value = np.append(value, value[-1])
-							uncertainty = np.append(uncertainty, uncertainty[-1])
-							w = np.append(w, sys.float_info.epsilon)
-						elif len(date) == 3:
-							case = 2
-							# This is to avoid negative Cd^2 when N = 3 and to give us a better error estimate
-							date = np.append(date, [date[-1], date[-1]])
-							value = np.append(value, [value[-1], value[-1]])
-							uncertainty = np.append(uncertainty, [uncertainty[-1], uncertainty[-1]])
-							w = np.append(w, [sys.float_info.epsilon, sys.float_info.epsilon])
-						p, c = np.polyfit(date, value, 1, w=w, cov=True)
-						_, res, _, _, _ = np.polyfit(date, value, 1, w=w, full=True)
-						# where c is the covariance matrix of p -> c[0, 0] is the variance estimate of the slope.
-						# what we want is ({G_w}^T G_w)^{-1}, which is equal to c * (N - m - 2) / res
-						cov_m = c * (len(w) - 4) / res
-						self.fitdata['slope'][m, n] = p[0] * 365.25
-						self.fitdata['slope_err'][m, n] = np.sqrt(cov_m[0, 0]) * 365.25
-						# slope_error_arr[m, n] = np.sqrt(c[0, 0]) * 365.25
-						# ./point_TS_ver2-2_linreg.py:^^^^^^^^: RuntimeWarning: invalid value encountered in sqrt
-						# /data/whyj/Software/anaconda3/lib/python3.5/site-packages/numpy/lib/polynomial.py:606: RuntimeWarning: divide by zero encountered in true_divide
-						# fac = resids / (len(x) - order - 2.0)
-						if case == 0:
-							self.fitdata['residual'][m, n] = np.sum((np.polyval(p, date) - value) ** 2)
-						elif case == 1:
-							self.fitdata['residual'][m, n] = np.sum((np.polyval(p, date[:-1]) - value[:-1]) ** 2)
-						elif case == 2:
-							self.fitdata['residual'][m, n] = np.sum((np.polyval(p, date[:-2]) - value[:-2]) ** 2)
-							# residual_arr[m, n] = res[0]
+				# slope_ref = [(value[i] - pin_value) / float(date[i] - pin_date) * 365.25 for i in range(len(value))]
+				# for i in reversed(range(len(slope_ref))):
+				# 	if (slope_ref[i] > dhdt_limit_upper) or (slope_ref[i] < dhdt_limit_lower):
+				# 		_ = date.pop(i)
+				# 		_ = uncertainty.pop(i)
+				# 		_ = value.pop(i)
+				# self.fitdata['count'][m, n] = len(date)
+
+				# Whyjay: May 10, 2018: cancelled the min date span (date[-1] - date[0] > 0), previously > 200
+				# if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 0):
+				if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
+					slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty)
+					if residual > 100:
+						print(date, value, uncertainty)
+					self.fitdata['slope'][m, n] = slope
+					self.fitdata['slope_err'][m, n] = slope_err
+					self.fitdata['residual'][m, n] = residual
+					self.fitdata['count'][m, n] = count
 				# else:
 					# self.fitdata['count'] = len(ref_dem_TS[m][n]['date'])
 					# elif (date[-1] - date[0] > 0):
 					# 	slope_arr[m, n] = (value[1] - value[0]) / float(date[1] - date[0]) * 365.25
-		self.fitdata['count'][~self.refgeomask] = -9999
+		# self.fitdata['count'][~self.refgeomask] = -9999
 
 	def Fitdata2File(self):
 		# ==== Write to file ====

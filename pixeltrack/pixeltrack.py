@@ -47,7 +47,8 @@ ini.gdalwarp['ot'] = 'Float32'
 # ==== warp all DEMs using gdalwarp ====
 
 for imgpair in imgpairlist:
-    pair_dir = 'test_folder'
+    pair_dir = ini.io['pairs_dir']
+    # pair_dir = 'test_folder'
     # ampcor_label = 'r32x32_s32x32'
     # pair_label = '2016200_2016216'
     # pair_dir = 'wv_carto'
@@ -68,8 +69,8 @@ for imgpair in imgpairlist:
     if not ini.gdalwarp['t_srs']:
         ini.gdalwarp['t_srs'] = '"' + imgpair[0].GetProj4() + '"'
     if False:
-        for img in imgpair:
-            img.Unify(ini.gdalwarp)
+        # for img in imgpair:
+        #     img.Unify(ini.gdalwarp)
 
 
         ampcor_label = splitAmpcor(imgpair[0].fpath, imgpair[1].fpath, pair_dir, **ini.splitampcor)
@@ -170,7 +171,7 @@ for imgpair in imgpairlist:
         #     # This will generate a lot of warnings when using python 3...
         #     # anyway, it's generating 20160803203709_20160718203706_r32x32_s32x32_eastxyz.txt
         #     #                     and 20160803203709_20160718203706_r32x32_s32x32_northxyz.txt
-        getxyzs(pair_dir, ampcor_label, ini.splitampcor['step'], ini.splitampcor['step'], "1", "90", ref_samples, ref_lines, ul_x, ul_y, pair_label);
+        getxyzs(pair_dir, ampcor_label, ini.splitampcor['step'], ini.splitampcor['step'], "1", "1", ref_samples, ref_lines, ul_x, ul_y, pair_label);
 
         # else:
         #     print("\n***** \"" + east_xyz_path + "\" already exists, assuming E-W and N-S ASCII offsets (in m) files created properly for this run...\n");
