@@ -142,6 +142,9 @@ class ConfParams:
 			if 'gnu_parallel' in self.parallel:
 				s = self.parallel['gnu_parallel'].lower()
 				self.parallel['gnu_parallel'] = s in ['true', 't', 'yes', 'y', '1']
+		if hasattr(self, 'pxsettings'):
+			for key in self.pxsettings:
+				self.pxsettings[key] = int(self.pxsettings[key])
 
 
 

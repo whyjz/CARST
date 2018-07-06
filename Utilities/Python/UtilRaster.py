@@ -48,6 +48,7 @@ class SingleRaster:
 			self.date = None
 		else:
 			raise TypeError('The date format is not currently supported.')
+		self.iscepointer = None
 
 	def GetProjection(self):
 		ds = gdal.Open(self.fpath)
@@ -96,6 +97,17 @@ class SingleRaster:
 		lrx = ulx + (ds.RasterXSize * xres)
 		lry = uly + (ds.RasterYSize * yres)
 		return ulx, uly, lrx, lry
+
+	def GetDataType(self, band=1):
+
+		"""
+		return DataType: http://www.gdal.org/gdal_8h.html#a22e22ce0a55036a96f652765793fb7a4
+		"""
+
+		ds = gdal.Open(self.fpath)
+		dsband = ds.GetRasterBand(band)
+		return dsband.DataType
+
 
 	def Unify(self, params):
 
@@ -215,6 +227,37 @@ class SingleRaster:
 			print('Grdtrack failed. Please check if all the input parameters are properly set.')
 			sys.exit(retcode)
 		return newpath
-		
+
+	def AmpcorPrep(self):
+
+		"""
+		Prepare to be used in ampcor.
+		Ampcor package in ISCE uses a special file pointer for accessing geotiff data.
+		Therefore, we need ISCE module "Image" for this purpose.
+		"""
+
+		import isce
+		from isceobj.Image.Image import Image
+		# need a vrt file
+
+		obj = Image()
+		obj.setFilename(self.fpath)
+		obj.setWidth(self.GetRasterXSize())      # gdalinfo, first number
+		if self.GetDataType() <= 3:
+			obj.setDataType('SHORT')
+		elif 4 <= self.GetDataType() <= 5:
+			obj.setDataType('LONG')
+		elif self.GetDataType() == 6:
+			obj.setDataType('FLOAT')     
+		elif self.GetDataType() == 7:
+			obj.setDataType('DOUBLE') # SHORT, LONG, FLOAT, DOUBLE, etc
+		else:
+			obj.setDataType('CFLOAT') # not totally right, may be wrong
+		# obj.setBands(1)   # "self" requires a single band 
+		# obj.setAccessMode('read')
+		obj.setCaster('read', 'FLOAT')    # fixed as float
+		obj.createImage()
+		self.iscepointer = obj
 
 
+	

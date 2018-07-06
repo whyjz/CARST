@@ -3,6 +3,7 @@
 **/__pycache__
 **/gmt.history
 **/*.aux.xml
+**/isce.log
 pixeltrack/Landsat8_example/20160803203709_20160718203706/*
 pixeltrack/test_folder
 other_process/log_getUncertaintyDEM_grdtrack_output.xyz
