@@ -23,10 +23,12 @@ from UtilRaster import SingleRaster
 from UtilConfig import ConfParams
 from UtilPX import ampcor_task, writeout_ampcor_task
 # from UtilFit import DemPile
+import numpy as np
+from scipy.interpolate import griddata
 
 parser = ArgumentParser()
 parser.add_argument('config_file', help='Configuration file')
-# parser.add_argument('-s', '--step', help='Do a single step', dest='step')
+parser.add_argument('-s', '--step', help='Do a single step', dest='step')
 args = parser.parse_args()
 
 # ==== Read ini file ====
@@ -38,15 +40,58 @@ ini.VerifyParam()
 
 # # ==== Create two SingleRaster object and make them ready for pixel tracking ====
 
-a = SingleRaster(ini.imagepair['image1'], date=ini.imagepair['image1_date'])
-b = SingleRaster(ini.imagepair['image2'], date=ini.imagepair['image2_date'])
-a.AmpcorPrep()
-b.AmpcorPrep()
+if args.step == 'ampcor':
 
-# # ==== Run main processes ====
+	a = SingleRaster(ini.imagepair['image1'], date=ini.imagepair['image1_date'])
+	b = SingleRaster(ini.imagepair['image2'], date=ini.imagepair['image2_date'])
+	a.AmpcorPrep()
+	b.AmpcorPrep()
 
-task = ampcor_task([a, b], ini)
-writeout_ampcor_task(task, ini)
+	# # ==== Run main processes ====
+
+	task = ampcor_task([a, b], ini)
+	writeout_ampcor_task(task, ini)
+
+elif args.step == 'cont':
+
+	a = SingleRaster(ini.imagepair['image1'], date=ini.imagepair['image1_date'])
+	b = SingleRaster(ini.imagepair['image2'], date=ini.imagepair['image2_date'])
+	ampoff = np.loadtxt(ini.result['ampcor_results'])
+	# extent = a.GetExtent()
+	geot = a.GetGeoTransform()
+	ulx = geot[0]
+	uly = geot[3]
+	xres = geot[1]
+	yres = geot[5]
+	datedelta = b.date - a.date
+	ampoff[:, 0] = ulx + (ampoff[:, 0] - 1) * xres
+	ampoff[:, 1] = ampoff[:, 1] * abs(xres) / datedelta.days
+	ampoff[:, 2] = uly + (ampoff[:, 2] - 1) * yres
+	ampoff[:, 3] = ampoff[:, 3] * abs(yres) / datedelta.days
+
+	xoffset = ampoff[:,[0,2,1]]
+	yoffset = ampoff[:,[0,2,3]]
+
+
+	np.savetxt('Demo_Tifs/xoff.txt', xoffset, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
+
+	outres = np.sqrt((xoffset[1, 0] - xoffset[0, 0]) * (xoffset[0, 1] - xoffset[37, 1]))
+	x = np.arange(xoffset[0, 0], xoffset[-1, 0], outres)
+	y = np.arange(xoffset[0, 1], xoffset[-1, 1], -outres)
+	xx, yy = np.meshgrid(x, y)
+
+	zz = griddata(xoffset[:, [0,1]], xoffset[:, 2], (xx, yy), method='linear')
+
+	xoffset_xyz = np.stack([xx.flatten(), yy.flatten(), zz.flatten()]).T
+	np.savetxt('Demo_Tifs/xoff.xyz', xoffset_xyz, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
+
+	xout = SingleRaster('Demo_Tifs/xoff.tif')
+	xout.XYZ2Raster('Demo_Tifs/xoff.xyz', projection=a.GetProjection())
+
+
+
+
+
 
 # if args.step is None:
 # 	a.InitTS()
@@ -68,11 +113,12 @@ writeout_ampcor_task(task, ini)
 
 # ==== Codes for test ====
 
-# import sys
-# sys.path.insert(0, '/data/whyj/Projects/Github/CARST/Utilities/Python/')
-# from UtilRaster import SingleRaster
-# from UtilConfig import ConfParams
-# inipath = 'defaults.ini'
-# ini = ConfParams(inipath)
-# ini.ReadParam()
-# ini.VerifyParam()
+import sys
+sys.path.insert(0, '/data/whyj/Projects/Github/CARST/Utilities/Python/')
+from UtilRaster import SingleRaster
+from UtilConfig import ConfParams
+import numpy as np
+inipath = 'defaults.ini'
+ini = ConfParams(inipath)
+ini.ReadParam()
+ini.VerifyParam()
