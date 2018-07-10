@@ -23,15 +23,13 @@ dh/dt **[v1.0]**:
 
 - All scripts are pythonized, i.e. it should work fine on any Python-supported platforms (e.g. Windows, Linux).
 
-pixel tracking **[v0.2]**:
+pixel tracking **[v1.0]**:
 
-- Mainly written in Bash, which means this part is still exclusively for Linux system.
-- ROI_PAC
-- python
-- matlab
-- perl
-- gdal
-- GMT
+- ISCE >= 2.0.0 (built with your python)
+- python, with the following modules installed
+    - numpy 
+    - scipy
+    - gdal
 
 Folder Structure
 ----------------
@@ -41,27 +39,29 @@ Folder Structure
     - dhdt.py: Main program
     - defaults.ini: template configuration file
     - Demo_DEMs: Demo input files
-- pixeltrack: Main programs for pixel tracking **[v0.2]**
+- pixeltrack: Main programs for pixel tracking **[v1.0]**
+    - pixeltrack.py: main program
+    - defaults.ini: template configuration file
+    - Demo_Tifs: Demo input files
 
 Detailed Description
 --------------------
 - Doc/dhdt/README.rst: **[v1.0]** dh/dt documentation
-- Doc/pixeltrack/Ampcor_PX: old files, needed to be modified or removed
-- Doc/pixeltrack/LandsatPX: **[v0.1]** Landsat pixel tracking documentation
-- Doc/pixeltrack/Landsat_PX_examples: some output files mades by v0.1 codes?
-- Doc/pixeltrack/SARPixelTracking: **[v0.1]** SAR-imagery pixel tracking documentation
+- Doc/pixeltrack/README.rst: **[v1.0]** pixel tracking documentation
 
 Version History
 ---------------
-The dh/dt **[v1.0]** is now being developed by Whyjay Zheng. Any suggestions/ideas would be
-really appreciated. Here's the reference to cite:
+The dh/dt **[v1.0]**  and the pixel tracking **[v1.0]** is now being developed by 
+Whyjay Zheng. Any suggestions/ideas would be really appreciated. 
+Here's the reference to cite for dh/dt **[v1.0]**:
 
 - Zheng, W., Pritchard, M. E., Willis, M. J., Tepes, P., Gourmelen, N., Benham, T. J., & 
   Dowdeswell, J. A. (2018). Remote Sensing of Environment Accelerating glacier mass loss 
   on Franz Josef Land, Russian Arctic. Remote Sensing of Environment 211, 357–375. 
   http://doi.org/10.1016/j.rse.2018.04.004
 
-The pixel tracking package may be updated in the near future, but it's not in the priority for now.
+There's still no reference to cite for pixel tracking **[v1.0]**, but you can use our
+reference(s) for the old version for credits.
 
 The dh/dt **[v0.2]** and the pixel tracking **[v0.2]** was developed by Whyjay Zheng,
 William J. Durkin, and Professor Matthew Pritchard, Cornell University.
