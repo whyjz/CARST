@@ -144,7 +144,15 @@ class ConfParams:
 				self.parallel['gnu_parallel'] = s in ['true', 't', 'yes', 'y', '1']
 		if hasattr(self, 'pxsettings'):
 			for key in self.pxsettings:
-				self.pxsettings[key] = int(self.pxsettings[key])
+				if not self.pxsettings[key]:
+					# empty string
+					self.pxsettings[key] = None
+				else:
+					self.pxsettings[key] = int(self.pxsettings[key])
+			if 'size_across' not in self.pxsettings:
+				self.pxsettings['size_across'] = None
+			if 'size_down' not in self.pxsettings:
+				self.pxsettings['size_down'] = None
 
 
 
