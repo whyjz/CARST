@@ -52,7 +52,7 @@ if args.step == 'ampcor' or args.step is None:
 	task = ampcor_task([a, b], ini)
 	writeout_ampcor_task(task, ini)
 
-if args.step == 'cont' or args.step is None:
+if args.step == 'rawvelo' or args.step is None:
 
 	ampoff = AmpcoroffFile(ini.result['ampcor_results'])
 	ampoff.Load()
@@ -60,6 +60,14 @@ if args.step == 'cont' or args.step is None:
 	ampoff.Ampcoroff2Velo()
 	ampoff.Velo2XYV()
 	ampoff.XYV2Raster()
+
+if args.step == 'correctvelo' or args.step is None:
+
+	ras = ini.result['geotiff_prefix'] + '_vx.tif'
+	shp = ini.velocorrection['bedrock']
+	c = SingleRaster(ras)
+	bdval_list = c.ClippedByPolygon(shp)
+	print(bdval_list)
 
 # ==== Codes for test ====
 
