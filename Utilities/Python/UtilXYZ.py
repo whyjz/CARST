@@ -10,6 +10,73 @@ import numpy as np
 from UtilRaster import SingleRaster
 from scipy.interpolate import griddata
 
+class ZArray(np.ndarray):
+
+	def __new__(cls, input_array):
+		# For now input_array should be a 1-d array
+		# Input array is an already formed ndarray instance
+		# We need first to cast to be our class type
+		obj = np.asarray(input_array).view(cls)
+		return obj
+
+	def __array_finalize__(self, obj):
+		if obj is None: return
+		# self.info = getattr(obj, 'info', None)
+
+	# =============================================================================================
+	# ==== The following functions are designed firstly for the functions in the class XYZFile ====
+	# ==== and later is has modified to a QGIS processing scripts called MAD_outlier_filter.py ====
+	# ==== now we have copied them back. ==========================================================
+	# =============================================================================================
+	def StatisticOutput(self, plot=True, mad_multiplier=3.0, pngname=None):
+		mad = lambda x : 1.482 * np.median(abs(x - np.median(x)))
+		if self.size == 0:
+			print('WARNING: there is no Z records.')
+			return [], np.nan, np.nan, np.nan
+		else:
+			offset_median = np.median(self)
+			offset_mad = mad(self)
+			lbound = offset_median - mad_multiplier * offset_mad
+			ubound = offset_median + mad_multiplier * offset_mad
+			idx2 = np.logical_and(self > lbound, self < ubound)
+			if plot == True and pngname is not None:
+				self.HistWithOutliers(idx2, pngname)
+			trimmed_numlist = self[idx2]
+			return idx2, trimmed_numlist.mean(), np.median(trimmed_numlist), trimmed_numlist.std(ddof=1)
+
+	def HistWithOutliers(self, idx2, pngname, histogram_bound=10):
+
+		import matplotlib.pyplot as plt
+		nbins = len(self) // 4 + 1
+		nbins = 201 if nbins > 201 else nbins
+		lbound = min(self) if min(self) >= -histogram_bound else -histogram_bound
+		rbound = max(self) if max(self) <= histogram_bound else histogram_bound
+		if lbound >= rbound:
+			lbound = min(self)
+			rbound = max(self)
+		bins = np.linspace(lbound, rbound, nbins)
+		trimmed_numlist = self[idx2]
+		N_outside_lbound_red = int(sum(self < lbound))
+		N_outside_rbound_red = int(sum(self > rbound))
+		N_outside_lbound_blue = int(sum(trimmed_numlist < lbound))
+		N_outside_rbound_blue = int(sum(trimmed_numlist > rbound))
+		title_str = '[Red|Blue] L outside: [{}|{}] R outside: [{}|{}]'.format(N_outside_lbound_red, N_outside_lbound_blue, N_outside_rbound_red, N_outside_rbound_blue)
+		# plot histograms
+		plt.hist(self, bins=bins, color=[0.95, 0.25, 0.1])
+		plt.hist(trimmed_numlist, bins=bins, color=[0.1, 0.25, 0.95])
+		plt.ylabel('N')
+		plt.xlabel('offset (pixel value unit)')
+		plt.title(title_str)
+		plt.savefig(pngname, format='png', dpi=200)
+		plt.cla()
+	# =============================================================================================
+	# ==== The functions above are designed firstly for the functions in the class XYZFile ========
+	# ==== and later is has modified to a QGIS processing scripts called MAD_outlier_filter.py ====
+	# ==== now we have copied them back. ==========================================================
+	# =============================================================================================
+
+
+
 class XYZFile:
 
 	def __init__(self, fpath=None, refpts_path=None, dem_path=None):
@@ -33,6 +100,9 @@ class XYZFile:
 		self.data = np.loadtxt(self.fpath)
 
 	def StatisticOutput(self, pngname):
+
+		# for getUncertaintyDEM
+
 		mad = lambda x : 1.482 * np.median(abs(x - np.median(x)))
 		if self.data.size == 0:
 			print('NOTE: ' + self.dem_path + ' does not cover any ref points.')
@@ -61,6 +131,8 @@ class XYZFile:
 			return []
 
 	def HistWithOutliers(self, pngname):
+
+		# for getUncertaintyDEM
 
 		import matplotlib.pyplot as plt
 		

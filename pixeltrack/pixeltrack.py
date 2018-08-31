@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilitie
 from UtilRaster import SingleRaster
 from UtilConfig import ConfParams
 from UtilPX import ampcor_task, writeout_ampcor_task
-from UtilXYZ import AmpcoroffFile
+from UtilXYZ import ZArray, AmpcoroffFile
 # from UtilFit import DemPile
 import numpy as np
 
@@ -65,9 +65,31 @@ if args.step == 'correctvelo' or args.step is None:
 
 	ras = ini.result['geotiff_prefix'] + '_vx.tif'
 	shp = ini.velocorrection['bedrock']
-	c = SingleRaster(ras)
-	bdval_list = c.ClippedByPolygon(shp)
-	print(bdval_list)
+	vx = SingleRaster(ras)
+	bdval_list = ZArray(vx.ClippedByPolygon(shp))
+	# print(bdval_list)
+	idx2, mean, median_x, std = bdval_list.StatisticOutput(pngname=ini.velocorrection['histogram_x'])
+	ras = ini.result['geotiff_prefix'] + '_vy.tif'
+	shp = ini.velocorrection['bedrock']
+	vy = SingleRaster(ras)
+	bdval_list = ZArray(vy.ClippedByPolygon(shp))
+	# print(bdval_list)
+	idx2, mean, median_y, std = bdval_list.StatisticOutput(pngname=ini.velocorrection['histogram_y'])
+
+	vxa = vx.ReadAsArray()
+	vya = vy.ReadAsArray()
+	vxa = vxa - median_x
+	vya = vya - median_y
+	maga = np.sqrt(vxa ** 2 + vya ** 2)
+
+	ras_xa = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_vx.tif')
+	ras_ya = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_vy.tif')
+	ras_maga = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_mag.tif')
+	ras_xa.Array2Raster(vxa, vx)
+	ras_ya.Array2Raster(vya, vx)
+	ras_maga.Array2Raster(maga, vx)
+
+
 
 # ==== Codes for test ====
 
