@@ -89,6 +89,20 @@ if args.step == 'correctvelo' or args.step is None:
 	ras_ya.Array2Raster(vya, vx)
 	ras_maga.Array2Raster(maga, vx)
 
+# needs statistics
+
+if args.step == 'hp':
+
+	from scipy import ndimage
+	a = SingleRaster(ini.imagepair['image2'], date=ini.imagepair['image2_date'])
+	data = a.ReadAsArray()
+	lowpass = ndimage.gaussian_filter(data.astype(float), 3)
+	gauss_highpass = data - lowpass
+	ag = SingleRaster(ini.imagepair['image2'].replace('.TIF', 'GHP_3sig.TIF'))
+	ag.Array2Raster(gauss_highpass, a)
+	# ag = SingleRaster(ini.imagepair['image1'].replace('.TIF', 'GLP_3sig.TIF'))
+	# ag.Array2Raster(lowpass, a)
+
 
 
 # ==== Codes for test ====
