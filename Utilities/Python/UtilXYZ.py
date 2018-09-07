@@ -151,12 +151,19 @@ class AmpcoroffFile:
 	def __init__(self, fpath=None):
 		self.fpath = fpath
 		self.data = None
-		self.xoffset = None
-		self.yoffset = None
-		self.xyv_x   = None
-		self.xyv_y   = None
-		self.xyv_mag = None
+		self.velo_x  = None
+		self.velo_y  = None
+		self.snr     = None
+		self.err_x   = None
+		self.err_y   = None
 		self.ini     = None
+		self.xyv_velo_x   = None
+		self.xyv_velo_y   = None
+		self.xyv_mag      = None
+		self.xyv_snr      = None
+		self.xyv_err_x    = None
+		self.xyv_err_y    = None
+
 
 	def Load(self):
 
@@ -183,7 +190,16 @@ class AmpcoroffFile:
 		"""
 		ref_raster: a SingleRaster object that is used for this pixel tracking
 		datedelta: a timedelta object that is the time span between two input images
-		these values will override the settings from self.ini, if self.ini also exists. 
+		these values will override the settings from self.ini, if self.ini also exists.
+
+		the final output is
+		1. self.velo_x  ->  the x comp of velocity (m/days) at where Ampcor has processed
+		2. self.velo_y  ->  the y comp of velocity (m/days) ...
+		3. self.snr     ->  the Signal-to-Noise Ratio ...
+		4. self.err_x   ->  the x comp of the error of the velocity (m/days) ....
+		5. self.err_y   ->  the y comp of the error of the velocity (m/days) ....
+		All of these are in N-by-3 array, and the columns are 
+		1) projected x coor, 2) projected y coor, 3) the desired quantity, respectively.
 		"""
 
 		if ref_raster is None:
@@ -202,38 +218,58 @@ class AmpcoroffFile:
 		self.data[:, 1] = self.data[:, 1] * abs(xres) / datedelta.days
 		self.data[:, 2] = uly + (self.data[:, 2] - 1) * yres
 		self.data[:, 3] = self.data[:, 3] * abs(yres) / datedelta.days
+		self.data[:, 5] = np.sqrt(self.data[:, 5]) / datedelta.days
+		self.data[:, 6] = np.sqrt(self.data[:, 6]) / datedelta.days
 
-		self.xoffset = self.data[:,[0,2,1]]
-		self.yoffset = self.data[:,[0,2,3]]
+		self.velo_x = self.data[:,[0,2,1]]
+		self.velo_y = self.data[:,[0,2,3]]
+		self.snr    = self.data[:,[0,2,4]]
+		self.err_x  = self.data[:,[0,2,5]]
+		self.err_y  = self.data[:,[0,2,6]]
 
-	def Velo2XYV(self, xyvfileprefix=None, spatialres=None):
+
+	def Velo2XYV(self, xyvfileprefix=None, spatialres=None, generate_xyztext=False):
 
 		"""
 		spatialres: the spatial resolution of the XYV file.
 		xyvfileprefix: the prefix for output xyv file.
+
+		the final output is
+		self.xyv_...  -> after griddata, the data have been warped into a grid with a fixed spatial resolution.
 		"""
 
 		if xyvfileprefix is None:
 			xyvfileprefix = self.ini.result['geotiff_prefix']
 		if spatialres is None:
-			y_list = np.unique(self.xoffset[:, 1])
-			spatialres = np.sqrt((self.xoffset[1, 0] - self.xoffset[0, 0]) * (y_list[-1] - y_list[-2]))
+			y_list = np.unique(self.velo_x[:, 1])
+			spatialres = np.sqrt((self.velo_x[1, 0] - self.velo_x[0, 0]) * (y_list[-1] - y_list[-2]))
 
-		x = np.arange(self.xoffset[0, 0], self.xoffset[-1, 0], spatialres)
-		y = np.arange(self.xoffset[0, 1], self.xoffset[-1, 1], -spatialres)
+		x = np.arange(self.velo_x[0, 0], self.velo_x[-1, 0], spatialres)
+		y = np.arange(self.velo_x[0, 1], self.velo_x[-1, 1], -spatialres)
 		xx, yy = np.meshgrid(x, y)
 
-		vx = griddata(self.xoffset[:, [0,1]], self.xoffset[:, 2], (xx, yy), method='linear')
-		vy = griddata(self.yoffset[:, [0,1]], self.yoffset[:, 2], (xx, yy), method='linear')
+		vx = griddata(self.velo_x[:, [0,1]], self.velo_x[:, 2], (xx, yy), method='linear')
+		vy = griddata(self.velo_y[:, [0,1]], self.velo_y[:, 2], (xx, yy), method='linear')
 		mag = np.sqrt(vx ** 2 + vy ** 2)
+		snr  = griddata(self.snr[:, [0,1]],   self.snr[:, 2],   (xx, yy), method='linear')
+		errx = griddata(self.err_x[:, [0,1]], self.err_x[:, 2], (xx, yy), method='linear')
+		erry = griddata(self.err_y[:, [0,1]], self.err_y[:, 2], (xx, yy), method='linear')
 
-		self.xyv_x   = np.stack([xx.flatten(), yy.flatten(), vx.flatten()]).T
-		self.xyv_y   = np.stack([xx.flatten(), yy.flatten(), vy.flatten()]).T
+		self.xyv_velo_x   = np.stack([xx.flatten(), yy.flatten(), vx.flatten()]).T
+		self.xyv_velo_y   = np.stack([xx.flatten(), yy.flatten(), vy.flatten()]).T
 		self.xyv_mag = np.stack([xx.flatten(), yy.flatten(), mag.flatten()]).T
+		self.xyv_snr = np.stack([xx.flatten(), yy.flatten(), snr.flatten()]).T
+		self.xyv_err_x = np.stack([xx.flatten(), yy.flatten(), errx.flatten()]).T
+		self.xyv_err_y = np.stack([xx.flatten(), yy.flatten(), erry.flatten()]).T
 
-		np.savetxt(xyvfileprefix + '_vx.xyz', self.xyv_x, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
-		np.savetxt(xyvfileprefix + '_vy.xyz', self.xyv_y, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
-		np.savetxt(xyvfileprefix + '_mag.xyz', self.xyv_mag, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
+		if generate_xyztext:
+			np.savetxt(xyvfileprefix + '_vx.xyz', self.xyv_velo_x, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
+			np.savetxt(xyvfileprefix + '_vy.xyz', self.xyv_velo_y, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
+			np.savetxt(xyvfileprefix + '_mag.xyz', self.xyv_mag, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
+			np.savetxt(xyvfileprefix + '_snr.xyz', self.xyv_snr, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
+			np.savetxt(xyvfileprefix + '_errx.xyz', self.xyv_err_x, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
+			np.savetxt(xyvfileprefix + '_erry.xyz', self.xyv_err_y, delimiter=" ", fmt='%10.2f %10.2f %10.6f')
+
 
 	def XYV2Raster(self, xyvfileprefix=None, ref_raster=None):
 
@@ -246,22 +282,34 @@ class AmpcoroffFile:
 		if ref_raster is None:
 			ref_raster = SingleRaster(self.ini.imagepair['image1'], date=self.ini.imagepair['image1_date'])
 
-		vx_xyz = xyvfileprefix + '_vx.xyz'
-		vy_xyz = xyvfileprefix + '_vy.xyz'
-		mag_xyz = xyvfileprefix + '_mag.xyz'
+		# vx_xyz = xyvfileprefix + '_vx.xyz'
+		# vy_xyz = xyvfileprefix + '_vy.xyz'
+		# mag_xyz = xyvfileprefix + '_mag.xyz'
 
-		vx_gtiff = vx_xyz.replace('xyz', 'tif')
-		vy_gtiff = vy_xyz.replace('xyz', 'tif')
-		mag_gtiff = mag_xyz.replace('xyz', 'tif')
+		# vx_gtiff = vx_xyz.replace('xyz', 'tif')
+		# vy_gtiff = vy_xyz.replace('xyz', 'tif')
+		# mag_gtiff = mag_xyz.replace('xyz', 'tif')
+
+		vx_gtiff = xyvfileprefix + '_vx.tif'
+		vy_gtiff = xyvfileprefix + '_vy.tif'
+		mag_gtiff = xyvfileprefix + '_mag.tif'
+		snr_gtiff = xyvfileprefix + '_snr.tif'
+		errx_gtiff = xyvfileprefix + '_errx.tif'
+		erry_gtiff = xyvfileprefix + '_erry.tif'
 
 		xraster = SingleRaster(vx_gtiff)
 		yraster = SingleRaster(vy_gtiff)
 		magraster = SingleRaster(mag_gtiff)
+		snrraster = SingleRaster(snr_gtiff)
+		errxraster = SingleRaster(errx_gtiff)
+		erryraster = SingleRaster(erry_gtiff)
 
-		proj = ref_raster.GetProjection()
+		# proj = ref_raster.GetProjection()
 
-		xraster.XYZ2Raster(vx_xyz, projection=proj)
-		yraster.XYZ2Raster(vy_xyz, projection=proj)
-		magraster.XYZ2Raster(mag_xyz, projection=proj)
+		# xraster.XYZ2Raster(vx_xyz, projection=proj)
+		# yraster.XYZ2Raster(vy_xyz, projection=proj)
+		# magraster.XYZ2Raster(mag_xyz, projection=proj)
+
+		xraster.Array2Raster(self.xyv_velo_x, ref_raster)
 
 

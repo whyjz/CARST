@@ -58,7 +58,7 @@ if args.step == 'rawvelo' or args.step is None:
 	ampoff.Load()
 	ampoff.SetIni(ini)
 	ampoff.Ampcoroff2Velo()
-	ampoff.Velo2XYV()
+	ampoff.Velo2XYV(generate_xyztext=ini.result['if_generate_xyztext'])
 	ampoff.XYV2Raster()
 
 if args.step == 'correctvelo' or args.step is None:

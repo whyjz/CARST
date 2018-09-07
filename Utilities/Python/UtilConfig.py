@@ -153,6 +153,11 @@ class ConfParams:
 				self.pxsettings['size_across'] = None
 			if 'size_down' not in self.pxsettings:
 				self.pxsettings['size_down'] = None
+		if hasattr(self, 'result'):
+			if 'if_generate_xyztext' in self.result:
+				self.result['if_generate_xyztext'] = bool(int(self.result['if_generate_xyztext']))
+			else:
+				self.result['if_generate_xyztext'] = False
 
 
 

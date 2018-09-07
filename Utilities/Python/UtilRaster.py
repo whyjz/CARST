@@ -190,6 +190,22 @@ class SingleRaster:
 		# Save to file
 		out_raster.FlushCache()
 
+	def XYZArray2Raster(self, array, projection=''):
+
+		""" 
+		Starting from HERE!!!!!!!!!!!
+		"""
+
+		driver = gdal.GetDriverByName('GTiff')
+
+
+		src_ds = gdal.Open(xyzfilename)
+		out_raster = driver.CreateCopy(self.fpath, src_ds, 0 )
+		out_raster.SetProjection(projection)
+		out_raster.SetGeoTransform(   src_ds.GetGeoTransform()   )
+		# out_raster.GetRasterBand(1).SetNoDataValue(nodatavalue)
+		out_raster.FlushCache()
+
 	def XYZ2Raster(self, xyzfilename, projection=''):
 
 		""" 
