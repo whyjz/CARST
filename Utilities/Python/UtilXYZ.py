@@ -12,16 +12,28 @@ from scipy.interpolate import griddata
 
 class ZArray(np.ndarray):
 
+	# A subclass from ndarray, with some new attributes and fancier methods for our purposes
+	# please see
+	# https://docs.scipy.org/doc/numpy-1.13.0/user/basics.subclassing.html
+	# for more details.
+
 	def __new__(cls, input_array):
 		# For now input_array should be a 1-d array
 		# Input array is an already formed ndarray instance
 		# We need first to cast to be our class type
 		obj = np.asarray(input_array).view(cls)
+		obj.MAD_idx = None
+		obj.MAD_mean = None
+		obj.MAD_median = None
+		obj.MAD_std = None
 		return obj
 
 	def __array_finalize__(self, obj):
 		if obj is None: return
-		# self.info = getattr(obj, 'info', None)
+		self.MAD_idx    = getattr(obj, 'MAD_idx', None)
+		self.MAD_mean   = getattr(obj, 'MAD_mean', None)
+		self.MAD_median = getattr(obj, 'MAD_median', None)
+		self.MAD_std    = getattr(obj, 'MAD_std', None)
 
 	# =============================================================================================
 	# ==== The following functions are designed firstly for the functions in the class XYZFile ====
@@ -38,13 +50,16 @@ class ZArray(np.ndarray):
 			offset_mad = mad(self)
 			lbound = offset_median - mad_multiplier * offset_mad
 			ubound = offset_median + mad_multiplier * offset_mad
-			idx2 = np.logical_and(self > lbound, self < ubound)
+			self.MAD_idx = np.logical_and(self > lbound, self < ubound)
+			trimmed_numlist = self[self.MAD_idx]
+			self.MAD_mean = trimmed_numlist.mean()
+			self.MAD_median = np.median(trimmed_numlist)
+			self.MAD_std = trimmed_numlist.std(ddof=1)
 			if plot == True and pngname is not None:
-				self.HistWithOutliers(idx2, pngname)
-			trimmed_numlist = self[idx2]
-			return idx2, trimmed_numlist.mean(), np.median(trimmed_numlist), trimmed_numlist.std(ddof=1)
+				self.HistWithOutliers(pngname)
+			# return idx2, trimmed_numlist.mean(), np.median(trimmed_numlist), trimmed_numlist.std(ddof=1)
 
-	def HistWithOutliers(self, idx2, pngname, histogram_bound=10):
+	def HistWithOutliers(self, pngname, histogram_bound=10):
 
 		import matplotlib.pyplot as plt
 		nbins = len(self) // 4 + 1
@@ -55,7 +70,7 @@ class ZArray(np.ndarray):
 			lbound = min(self)
 			rbound = max(self)
 		bins = np.linspace(lbound, rbound, nbins)
-		trimmed_numlist = self[idx2]
+		trimmed_numlist = self[self.MAD_idx]
 		N_outside_lbound_red = int(sum(self < lbound))
 		N_outside_rbound_red = int(sum(self > rbound))
 		N_outside_lbound_blue = int(sum(trimmed_numlist < lbound))
@@ -304,12 +319,19 @@ class AmpcoroffFile:
 		errxraster = SingleRaster(errx_gtiff)
 		erryraster = SingleRaster(erry_gtiff)
 
-		# proj = ref_raster.GetProjection()
+		proj = ref_raster.GetProjection()
+		# print(self.xyv_velo_x)
+		# print(proj)
 
 		# xraster.XYZ2Raster(vx_xyz, projection=proj)
 		# yraster.XYZ2Raster(vy_xyz, projection=proj)
 		# magraster.XYZ2Raster(mag_xyz, projection=proj)
 
-		xraster.Array2Raster(self.xyv_velo_x, ref_raster)
+		xraster.XYZArray2Raster(self.xyv_velo_x, projection=proj)
+		yraster.XYZArray2Raster(self.xyv_velo_y, projection=proj)
+		magraster.XYZArray2Raster(self.xyv_mag, projection=proj)
+		snrraster.XYZArray2Raster(self.xyv_snr, projection=proj)
+		errxraster.XYZArray2Raster(self.xyv_err_x, projection=proj)
+		erryraster.XYZArray2Raster(self.xyv_err_y, projection=proj)
 
 

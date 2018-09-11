@@ -4,6 +4,7 @@
 # last edit: Aug 26 2016
 # last edit: Dec 7 2016 (fixed a bug of SingleRaster.Array2Raster -> nodatavalue)
 # last edit: Doc 12 2016 (Change the self.uncertainty in __init__ and add ReadGeolocPoint method) 
+# last edit: Sep 11 2018 (added a new class: RasterVelos)
 
 import sys
 import os
@@ -193,17 +194,29 @@ class SingleRaster:
 	def XYZArray2Raster(self, array, projection=''):
 
 		""" 
-		Starting from HERE!!!!!!!!!!!
+		This is to write an xyzfile-like array to raster. Be cautious overwritting the old one! 
+		projection is in wkt string. it can be given by the GetProjection() from a SingleRaster or a gdal.Dataset object.
+		This method will use the geotransform values from the xyzfile-like array itself; i.e. 
+		ul coordinate is (min(x), max(y)) and the spacing is unique(diff(unique(x))) and unique(diff(unique(y))).
+		The nodata value is not set.
 		"""
 
 		driver = gdal.GetDriverByName('GTiff')
-
-
-		src_ds = gdal.Open(xyzfilename)
-		out_raster = driver.CreateCopy(self.fpath, src_ds, 0 )
+		# Saved in gdal 32-bit float geotiff format
+		xaxis = np.unique(array[:,0])
+		yaxis = np.unique(array[:,1])
+		out_raster = driver.Create(self.fpath, len(xaxis),  len(yaxis), 1, gdal.GDT_Float32)
+		xspacing = np.unique(np.diff(xaxis))
+		yspacing = np.unique(np.diff(yaxis))
+		if len(xspacing) == 1 and len(yspacing) == 1:
+			# assuming no rotation in the Affine transform
+			new_geotransform = (min(xaxis), xspacing[0], 0, max(yaxis), 0, -yspacing[0])
+		else:
+			raise TypeError('There is someting wrong in XYZ array format. Check the consistency of the x- or y-spacing.')
+		out_raster.SetGeoTransform( new_geotransform )
 		out_raster.SetProjection(projection)
-		out_raster.SetGeoTransform(   src_ds.GetGeoTransform()   )
 		# out_raster.GetRasterBand(1).SetNoDataValue(nodatavalue)
+		out_raster.GetRasterBand(1).WriteArray(np.reshape(array[:, 2], (len(yaxis), len(xaxis))))
 		out_raster.FlushCache()
 
 	def XYZ2Raster(self, xyzfilename, projection=''):
@@ -296,12 +309,132 @@ class SingleRaster:
 		geometry = geoms[0] # shapely geometry
 		geoms = [mapping(geoms[0])] # transform to GeJSON format
 		with rasterio.open(self.fpath) as src:
-			out_image, out_transform = mask(src, geoms, crop=True)
+			out_image, out_transform = mask(src, geoms, crop=True, nodata=-9999.0)
 			# The out_image result is a Numpy masked array
-			no_data = src.nodata
-			if no_data is None:
-				no_data = 0.0
+			# no_data = src.nodata
+			# if no_data is None:
+			# 	no_data = 0.0
+			nodata = -9999.0
 		clipped_data = out_image.data[0]
 		# extract the valid values
 		# and return them as a numpy 1-D array
-		return np.extract(clipped_data != no_data, clipped_data)
+		return np.extract(clipped_data != nodata, clipped_data)
+
+
+
+
+class RasterVelos():
+
+	def __init__(self, vx=None, vy=None, mag=None, snr=None, errx=None, erry=None):
+
+		'''
+		All 6 attributes are supposed to be a SingleRaster object.
+		'''
+
+		self.vx = None
+		# self.vx_val = None
+		self.vy = None
+		# self.vy_val = None
+		self.mag = None
+		self.mag_val = None
+		self.snr = None
+		self.errx = None
+		self.erry = None
+		self.errmag = None
+		if type(vx) is SingleRaster:
+			self.vx = vx
+		if type(vy) is SingleRaster:
+			self.vy = vy
+		if type(mag) is SingleRaster:
+			self.mag = mag
+		if type(snr) is SingleRaster:
+			self.snr = snr
+		if type(errx) is SingleRaster:
+			self.errx = errx
+		if type(erry) is SingleRaster:
+			self.erry = erry
+
+	def SetVx(self, vx):
+		self.vx = vx
+
+	def SetVy(self, vy):
+		self.vy = vy
+
+	def SetMag(self, mag):
+		self.mag = mag
+
+	def SetSnr(self, snr):
+		self.snr = snr
+
+	def SetErrx(self, errx):
+		self.errx = errx
+
+	def SetErry(self, erry):
+		self.erry = erry
+
+	def CalMag(self):
+		if self.vx is None or self.vy is None:
+			raise TypeError("You Need BOTH Vx and Vy to calculate the magnitude of velocity.")
+		else:
+			self.mag_val = np.sqrt(self.vx.ReadAsArray() ** 2 + self.vy.ReadAsArray() ** 2)
+
+	def VeloCorrection(self, vx_zarray, vy_zarray, output_raster_prefix):
+
+		'''
+		vx_zarray and vy_zarray are ZArray objects.
+		'''
+
+		vx_val_corrected = self.vx.ReadAsArray() - vx_zarray.MAD_median
+		vy_val_corrected = self.vy.ReadAsArray() - vy_zarray.MAD_median
+		mag_val_corrected = np.sqrt(vx_val_corrected ** 2 + vy_val_corrected ** 2)
+
+		raster_vx_corrected = SingleRaster(output_raster_prefix + '_vx.tif')
+		raster_vx_corrected.Array2Raster(vx_val_corrected, self.vx)
+		raster_vy_corrected = SingleRaster(output_raster_prefix + '_vy.tif')
+		raster_vy_corrected.Array2Raster(vy_val_corrected, self.vy)
+		raster_mag_corrected = SingleRaster(output_raster_prefix + '_mag.tif')
+		raster_mag_corrected.Array2Raster(mag_val_corrected, self.vx)
+
+		self.SetVx(raster_vx_corrected)
+		self.SetVy(raster_vy_corrected)
+		self.SetMag(raster_mag_corrected)
+
+		# ==== Calculate the corrected error ====
+		# Note that we changed the way to calculate it from the previous version; Now the
+		# offset is not considered as an independent variable.
+		# Therefore, instead of using 
+		#
+		# sigma_vx' = sqrt(sigma_vx ^ 2 + corrected_std ^ 2)     (ref. realistic_speed_error.bash)
+		#
+		# we use
+		#
+		# sigma_vx' = sigma_vx + corrected_std 
+		#
+		# for a more realistic and conserved error estimate.
+
+		if self.errx is not None:
+			errx_val_corrected = self.errx.ReadAsArray() + vx_zarray.MAD_std
+			raster_errx_corrected = SingleRaster(output_raster_prefix + '_errx.tif')
+			raster_errx_corrected.Array2Raster(errx_val_corrected, self.errx)
+			self.SetErrx(raster_errx_corrected)
+
+
+		if self.erry is not None:
+			erry_val_corrected = self.erry.ReadAsArray() + vy_zarray.MAD_std
+			raster_erry_corrected = SingleRaster(output_raster_prefix + '_erry.tif')
+			raster_erry_corrected.Array2Raster(erry_val_corrected, self.erry)
+			self.SetErry(raster_erry_corrected)
+
+		if self.errx is not None and self.erry is not None:
+			errmag_val_corrected = np.sqrt(
+				                   (vx_val_corrected ** 2 * errx_val_corrected ** 2 + vy_val_corrected ** 2 * erry_val_corrected ** 2)
+				                   / (vx_val_corrected ** 2 + vy_val_corrected ** 2)
+				                   )
+			raster_errmag_corrected = SingleRaster(output_raster_prefix + '_errmag.tif')
+			raster_errmag_corrected.Array2Raster(errmag_val_corrected, self.errx)
+
+
+
+
+
+

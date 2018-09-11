@@ -19,7 +19,7 @@ from argparse import ArgumentParser
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
-from UtilRaster import SingleRaster
+from UtilRaster import SingleRaster, RasterVelos
 from UtilConfig import ConfParams
 from UtilPX import ampcor_task, writeout_ampcor_task
 from UtilXYZ import ZArray, AmpcoroffFile
@@ -63,31 +63,41 @@ if args.step == 'rawvelo' or args.step is None:
 
 if args.step == 'correctvelo' or args.step is None:
 
-	ras = ini.result['geotiff_prefix'] + '_vx.tif'
-	shp = ini.velocorrection['bedrock']
-	vx = SingleRaster(ras)
-	bdval_list = ZArray(vx.ClippedByPolygon(shp))
-	# print(bdval_list)
-	idx2, mean, median_x, std = bdval_list.StatisticOutput(pngname=ini.velocorrection['histogram_x'])
-	ras = ini.result['geotiff_prefix'] + '_vy.tif'
-	shp = ini.velocorrection['bedrock']
-	vy = SingleRaster(ras)
-	bdval_list = ZArray(vy.ClippedByPolygon(shp))
-	# print(bdval_list)
-	idx2, mean, median_y, std = bdval_list.StatisticOutput(pngname=ini.velocorrection['histogram_y'])
+	# We don't do elevation-depended correction for this version.
+	# Maybe it will be included in the future release.
 
-	vxa = vx.ReadAsArray()
-	vya = vy.ReadAsArray()
-	vxa = vxa - median_x
-	vya = vya - median_y
-	maga = np.sqrt(vxa ** 2 + vya ** 2)
+	shp = ini.velocorrection['bedrock']
+	prefix = ini.result['geotiff_prefix']
+	velo = RasterVelos(vx=SingleRaster(prefix + '_vx.tif'),
+		               vy=SingleRaster(prefix + '_vy.tif'),
+		               errx=SingleRaster(prefix + '_errx.tif'),
+		               erry=SingleRaster(prefix + '_erry.tif'))
 
-	ras_xa = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_vx.tif')
-	ras_ya = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_vy.tif')
-	ras_maga = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_mag.tif')
-	ras_xa.Array2Raster(vxa, vx)
-	ras_ya.Array2Raster(vya, vx)
-	ras_maga.Array2Raster(maga, vx)
+	# vxraw = SingleRaster(ini.result['geotiff_prefix'] + '_vx.tif')
+	vxraw_bdval = ZArray(velo.vx.ClippedByPolygon(shp))
+	vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['histogram_x'])
+	# idx2, mean, median_x, std = vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['histogram_x'])
+	# print(vxraw_bdval)
+
+	# vyraw = SingleRaster(ini.result['geotiff_prefix'] + '_vy.tif')
+	vyraw_bdval = ZArray(velo.vy.ClippedByPolygon(shp))
+	vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['histogram_y'])
+	# idx2, mean, median_y, std = vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['histogram_y'])
+
+	velo.VeloCorrection(vxraw_bdval, vyraw_bdval, ini.velocorrection['geotiff_prefix'])
+
+	# vxa = vx.ReadAsArray()
+	# vya = vy.ReadAsArray()
+	# vxa = vxa - median_x
+	# vya = vya - median_y
+	# maga = np.sqrt(vxa ** 2 + vya ** 2)
+
+	# ras_xa = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_vx.tif')
+	# ras_ya = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_vy.tif')
+	# ras_maga = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_mag.tif')
+	# ras_xa.Array2Raster(vxa, vx)
+	# ras_ya.Array2Raster(vya, vx)
+	# ras_maga.Array2Raster(maga, vx)
 
 # needs statistics
 
