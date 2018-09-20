@@ -195,6 +195,17 @@ class AmpcoroffFile:
 		"""
 
 		self.data = np.loadtxt(self.fpath)
+		self.CheckData()
+
+	def CheckData(self):
+		"""
+		Check if there's any strange value in the ampoff.
+		"""
+
+		# 1000 is an arbitrary value
+		idx = np.argwhere(abs(self.data[:, [1, 3]]) > 1000)
+		idx = np.unique(idx[:, 0])
+		self.data = np.delete(self.data, idx, 0)
 
 	def SetIni(self, ini):
 

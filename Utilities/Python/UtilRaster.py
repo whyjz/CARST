@@ -51,6 +51,9 @@ class SingleRaster:
 			raise TypeError('The date format is not currently supported.')
 		self.iscepointer = None
 
+	def SetPath(self, fpath):
+		self.fpath = fpath
+
 	def GetProjection(self):
 		ds = gdal.Open(self.fpath)
 		return ds.GetProjection()
@@ -267,7 +270,20 @@ class SingleRaster:
 
 		import isce
 		from isceobj.Image.Image import Image
-		# need a vrt file
+
+		# ==== need a vrt file
+		# >= Python 3.4 
+		from pathlib import Path
+		vrtpath = Path(self.fpath + '.vrt')
+		if not vrtpath.is_file():
+			print('Calling gdalbuildvrt...')
+			gdalbuildvrt_cmd = 'gdalbuildvrt ' + self.fpath + '.vrt ' + self.fpath
+			print(gdalbuildvrt_cmd)
+			retcode = subprocess.call(gdalbuildvrt_cmd, shell=True)
+			if retcode != 0:
+				print('gdalbuildvrt failed. Please check if all the input parameters are properly set.')
+				sys.exit(retcode)
+		# ====================
 
 		obj = Image()
 		obj.setFilename(self.fpath)
@@ -306,8 +322,9 @@ class SingleRaster:
 
 		shapefile = gpd.read_file(polygon_shapefile)
 		geoms = shapefile.geometry.values
-		geometry = geoms[0] # shapely geometry
-		geoms = [mapping(geoms[0])] # transform to GeJSON format
+		# geometry = geoms[0] # shapely geometry
+		# geoms = [mapping(geoms[0])] # transform to GeJSON format
+		geoms = [mapping(geoms[i]) for i in range(len(geoms))]
 		with rasterio.open(self.fpath) as src:
 			out_image, out_transform = mask(src, geoms, crop=True, nodata=-9999.0)
 			# The out_image result is a Numpy masked array
@@ -320,12 +337,26 @@ class SingleRaster:
 		# and return them as a numpy 1-D array
 		return np.extract(clipped_data != nodata, clipped_data)
 
+	def GaussianHighPass(self, sigma=3):
+
+		"""
+		Gaussian High Pass filter. Default sigma = 3.
+		"""
+
+		from scipy.ndimage import gaussian_filter
+		data = self.ReadAsArray()
+		lowpass = gaussian_filter(data.astype(float), sigma)
+		highpass = data - lowpass
+		hp_raster_path = self.fpath.rsplit('.', 1)[0] + '_GHP_' + str(sigma) + 'sig.tif'
+		hp_raster = SingleRaster(hp_raster_path)
+		hp_raster.Array2Raster(highpass, self)
+		self.SetPath(hp_raster_path)
 
 
 
 class RasterVelos():
 
-	def __init__(self, vx=None, vy=None, mag=None, snr=None, errx=None, erry=None):
+	def __init__(self, vx=None, vy=None, mag=None, snr=None, errx=None, erry=None, errmag=None):
 
 		'''
 		All 6 attributes are supposed to be a SingleRaster object.
@@ -353,6 +384,8 @@ class RasterVelos():
 			self.errx = errx
 		if type(erry) is SingleRaster:
 			self.erry = erry
+		if type(errmag) is SingleRaster:
+			self.errmag = errmag
 
 	def SetVx(self, vx):
 		self.vx = vx
@@ -372,11 +405,57 @@ class RasterVelos():
 	def SetErry(self, erry):
 		self.erry = erry
 
+	def SetErrmag(self, errmag):
+		self.errmag = errmag
+
 	def CalMag(self):
 		if self.vx is None or self.vy is None:
 			raise TypeError("You Need BOTH Vx and Vy to calculate the magnitude of velocity.")
 		else:
 			self.mag_val = np.sqrt(self.vx.ReadAsArray() ** 2 + self.vy.ReadAsArray() ** 2)
+
+	def VeloCorrectionInfo(self, vx_zarray, vy_zarray, logfile, pngname=None):
+
+		with open(logfile, 'w') as f:
+			f.write( 'Total points over bedrock =   {:6n}\n'.format(len(vx_zarray)) )
+			f.write( 'MAD_median_x       = {:6.3f}\n'.format(float(vx_zarray.MAD_median)) )
+			f.write( 'MAD_median_y       = {:6.3f}\n'.format(float(vy_zarray.MAD_median)) )
+			f.write( 'MAD_std_x          = {:6.3f}\n'.format(float(vx_zarray.MAD_std)) )
+			f.write( 'MAD_std_y          = {:6.3f}\n'.format(float(vy_zarray.MAD_std)) )
+			f.write( 'MAD_mean_x         = {:6.3f}\n'.format(float(vx_zarray.MAD_mean)) )
+			f.write( 'MAD_mean_y         = {:6.3f}\n'.format(float(vy_zarray.MAD_mean)) )
+
+		if pngname is not None:
+			import matplotlib.pyplot as plt
+			# import matplotlib
+			from scipy.stats import gaussian_kde
+			# font = {'family' : 'sans-serif',
+			#         'weight' : 'normal',
+			#         'size'   : 26}
+			# matplotlib.rc('font', **font)
+
+			xy = np.vstack([vx_zarray, vy_zarray])
+			z = gaussian_kde(xy)(xy)
+			plt.scatter(vx_zarray, vy_zarray, c=z, s=8, edgecolor='')
+			# cbar = plt.colorbar()
+			# cbar.set_label('Kernel density estimation')
+			# plt.scatter(np.reshape(c_data, -1), np.reshape(w_data, -1), c=cc)
+			# plt.plot(np.reshape(c_data, -1), np.reshape(w_data, -1), '.')
+			# plt.plot(np.arange(-25, 26), np.arange(-25, 26), 'k--', linewidth=2)
+
+			plt.axis('scaled')
+			lim = max([max(abs(vx_zarray)), max(abs(vx_zarray))])
+			plt.xlim([-lim, lim])
+			plt.ylim([-lim, lim])
+			# plt.tight_layout()
+			# plt.gca().set_aspect('equal')
+
+			# plt.xlabel('CryoSat dH/dt (m/yr)')
+			# plt.ylabel('WorldView dH/dt (m/yr)')
+			plt.ylabel('Vy (m/d)')
+			plt.xlabel('Vx (m/d)')
+			plt.savefig(pngname, format='png', dpi=200)
+			plt.cla()
 
 	def VeloCorrection(self, vx_zarray, vy_zarray, output_raster_prefix):
 
@@ -387,6 +466,7 @@ class RasterVelos():
 		vx_val_corrected = self.vx.ReadAsArray() - vx_zarray.MAD_median
 		vy_val_corrected = self.vy.ReadAsArray() - vy_zarray.MAD_median
 		mag_val_corrected = np.sqrt(vx_val_corrected ** 2 + vy_val_corrected ** 2)
+
 
 		raster_vx_corrected = SingleRaster(output_raster_prefix + '_vx.tif')
 		raster_vx_corrected.Array2Raster(vx_val_corrected, self.vx)
@@ -432,9 +512,93 @@ class RasterVelos():
 				                   )
 			raster_errmag_corrected = SingleRaster(output_raster_prefix + '_errmag.tif')
 			raster_errmag_corrected.Array2Raster(errmag_val_corrected, self.errx)
+			self.SetErrmag(raster_errmag_corrected)
 
+	def SNR_CutNoise(self, snr_threshold=5):
+		bad_pts = self.snr.ReadAsArray() <= snr_threshold
+		mag_val = self.mag.ReadAsArray()
+		mag_val[bad_pts] = -9999.0
+		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '_SNRnoise.tif')
+		raster_mag_cutnoise.Array2Raster(mag_val, self.mag)
+		self.SetMag(raster_mag_cutnoise)
 
+	def Fahnestock_CutNoise(self):
+		mag_val = self.mag.ReadAsArray()
+		magerr_val = self.errmag.ReadAsArray()
+		mag_val_ok = Fahnestock_noise_remover(mag_val, magerr_val, nodata_val=-9999.0)
+		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '_FAHnoise.tif')
+		raster_mag_cutnoise.Array2Raster(mag_val_ok, self.mag)
+		self.SetMag(raster_mag_cutnoise)
 
+def Fahnestock_noise_remover(array, error_array, nodata_val=-9999.0):
 
+	# based on the algorithm of Fahnestock et al. (2015): Landsat 8 image processing
+	# from the matlab file: smooth_step2.m
+	# that one was lastly modified by Whyjay Zheng, 2016 Mar 31
+	# we simplified the processes a little bit!
 
+	idxm = []
+	idxn = []
+
+	for m in range(1, array.shape[0] - 1):
+		for n in range(1, array.shape[1] - 1):
+			if m % 10 == 0 and n == 2:
+				print(m)
+			masked = False
+			data_point = array[m, n]
+			if data_point != nodata_val:
+				# masked = True
+				# else:
+				judge_array = array[m-1:m+2, n-1:n+2]
+				judge_array = judge_array.flatten()
+				# neighbors = np.delete(judge_array, 4)
+				judge_array = judge_array[judge_array != nodata_val]
+				# judge_array = np.delete(judge_array.flatten(), 4)
+				# judge_array = judge_array[judge_array != nodata_val]
+				if judge_array.size <= 2:
+					masked = True
+				# elif judge_array.size == 1:
+				# 	if abs(data_point - judge_array[0]) >= 1:
+				# 		masked = True
+				else:
+					if abs(data_point - judge_array.mean()) > 3 * judge_array.std():
+						masked = True
+					# elif np.std(judge_array) >= 1:
+					# 	masked = True
+					# elif np.std(judge_array) >= 3 * error_array[m, n]:
+					# 	masked = True
+					elif max(judge_array) - min(judge_array) > 3 * error_array[m, n]:
+						masked = True
+					# elif max(judge_array) - min(judge_array) >= 1:
+					# 	masked = True
+					# we cancelled this criterion
+					# elif judge_array.std() <= 0.001:
+					# 	masked = True
+			if masked:
+				idxm.append(m)
+				idxn.append(n)
+
+	for k in range(len(idxm)):
+		array[idxm[k], idxn[k]] = nodata_val
+
+	idxm2 = []
+	idxn2 = []
+
+	for m in range(1, array.shape[0] - 1):
+		for n in range(1, array.shape[1] - 1):
+			if m % 10 == 0 and n == 2:
+				print(m)
+			if array[m, n] != nodata_val:
+				judge_array = array[m-1:m+2, n-1:n+2]
+				# judge_array = np.delete(judge_array.flatten(), 4)
+				judge_array = judge_array.flatten()
+				judge_array = judge_array[judge_array != nodata_val]
+				if judge_array.size <= 3:
+					idxm2.append(m)
+					idxn2.append(n)
+
+	for k in range(len(idxm2)):
+		array[idxm2[k], idxn2[k]] = nodata_val
+
+	return array
 

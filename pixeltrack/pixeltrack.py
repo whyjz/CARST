@@ -2,6 +2,7 @@
 #
 # Main pixel-tracking (feature-tracking) script
 # by Whyjay Zheng, Jul 6 2018
+# laste modified: Sep 13, 2018
 
 # All concepts are from the old pixel-tracking code
 # but this code is using ampcor packing in ISCE instead of ROI_PAC
@@ -44,6 +45,9 @@ if args.step == 'ampcor' or args.step is None:
 
 	a = SingleRaster(ini.imagepair['image1'], date=ini.imagepair['image1_date'])
 	b = SingleRaster(ini.imagepair['image2'], date=ini.imagepair['image2_date'])
+	if ini.pxsettings['gaussian_hp']:
+		a.GaussianHighPass(sigma=3)
+		b.GaussianHighPass(sigma=3)
 	a.AmpcorPrep()
 	b.AmpcorPrep()
 
@@ -70,48 +74,38 @@ if args.step == 'correctvelo' or args.step is None:
 	prefix = ini.result['geotiff_prefix']
 	velo = RasterVelos(vx=SingleRaster(prefix + '_vx.tif'),
 		               vy=SingleRaster(prefix + '_vy.tif'),
+		               snr=SingleRaster(prefix + '_snr.tif'),
 		               errx=SingleRaster(prefix + '_errx.tif'),
 		               erry=SingleRaster(prefix + '_erry.tif'))
 
-	# vxraw = SingleRaster(ini.result['geotiff_prefix'] + '_vx.tif')
 	vxraw_bdval = ZArray(velo.vx.ClippedByPolygon(shp))
 	vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['histogram_x'])
-	# idx2, mean, median_x, std = vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['histogram_x'])
-	# print(vxraw_bdval)
 
-	# vyraw = SingleRaster(ini.result['geotiff_prefix'] + '_vy.tif')
 	vyraw_bdval = ZArray(velo.vy.ClippedByPolygon(shp))
 	vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['histogram_y'])
-	# idx2, mean, median_y, std = vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['histogram_y'])
 
+	velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini.velocorrection['logfile'], pngname=ini.velocorrection['xy_comparison_fig'] )
 	velo.VeloCorrection(vxraw_bdval, vyraw_bdval, ini.velocorrection['geotiff_prefix'])
 
-	# vxa = vx.ReadAsArray()
-	# vya = vy.ReadAsArray()
-	# vxa = vxa - median_x
-	# vya = vya - median_y
-	# maga = np.sqrt(vxa ** 2 + vya ** 2)
+if args.step == 'rmnoise' or args.step is None:
 
-	# ras_xa = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_vx.tif')
-	# ras_ya = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_vy.tif')
-	# ras_maga = SingleRaster(ini.velocorrection['geotiff_prefix'] + '_mag.tif')
-	# ras_xa.Array2Raster(vxa, vx)
-	# ras_ya.Array2Raster(vya, vx)
-	# ras_maga.Array2Raster(maga, vx)
+	try: 
+		velo
+	except NameError:
+		prefix = ini.velocorrection['geotiff_prefix']
+		velo = RasterVelos(vx=SingleRaster(prefix + '_vx.tif'),
+		                   vy=SingleRaster(prefix + '_vy.tif'),
+		                   snr=SingleRaster(ini.result['geotiff_prefix'] + '_snr.tif'),
+		                   mag=SingleRaster(prefix + '_mag.tif'),
+		                   errx=SingleRaster(prefix + '_errx.tif'),
+		                   erry=SingleRaster(prefix + '_erry.tif'),
+		                   errmag=SingleRaster(prefix + '_errmag.tif'))
 
-# needs statistics
+	velo.SNR_CutNoise(snr_threshold=ini.noiseremoval['snr'])
+	velo.Fahnestock_CutNoise()
 
-if args.step == 'hp':
 
-	from scipy import ndimage
-	a = SingleRaster(ini.imagepair['image2'], date=ini.imagepair['image2_date'])
-	data = a.ReadAsArray()
-	lowpass = ndimage.gaussian_filter(data.astype(float), 3)
-	gauss_highpass = data - lowpass
-	ag = SingleRaster(ini.imagepair['image2'].replace('.TIF', 'GHP_3sig.TIF'))
-	ag.Array2Raster(gauss_highpass, a)
-	# ag = SingleRaster(ini.imagepair['image1'].replace('.TIF', 'GLP_3sig.TIF'))
-	# ag.Array2Raster(lowpass, a)
+
 
 
 
