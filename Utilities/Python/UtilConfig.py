@@ -157,11 +157,16 @@ class ConfParams:
 				self.pxsettings['gaussian_hp'] = bool(int(self.pxsettings['gaussian_hp']))
 			else:
 				self.pxsettings['gaussian_hp'] = False
-		if hasattr(self, 'result'):
-			if 'if_generate_xyztext' in self.result:
-				self.result['if_generate_xyztext'] = bool(int(self.result['if_generate_xyztext']))
+		if hasattr(self, 'outputcontrol'):
+			if 'datepair_prefix' in self.outputcontrol:
+				self.outputcontrol['datepair_prefix'] = bool(int(self.outputcontrol['datepair_prefix']))
 			else:
-				self.result['if_generate_xyztext'] = False
+				self.outputcontrol['if_generate_xyztext'] = False
+		if hasattr(self, 'rawoutput'):
+			if 'if_generate_xyztext' in self.rawoutput:
+				self.rawoutput['if_generate_xyztext'] = bool(int(self.rawoutput['if_generate_xyztext']))
+			else:
+				self.rawoutput['if_generate_xyztext'] = False
 		if hasattr(self, 'noiseremoval'):
 			for key in self.noiseremoval:
 				self.noiseremoval[key] = float(self.noiseremoval[key])

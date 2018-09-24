@@ -265,7 +265,7 @@ class AmpcoroffFile:
 		"""
 
 		if xyvfileprefix is None:
-			xyvfileprefix = self.ini.result['geotiff_prefix']
+			xyvfileprefix = self.ini.rawoutput['label_geotiff']
 		if spatialres is None:
 			y_list = np.unique(self.velo_x[:, 1])
 			spatialres = np.sqrt((self.velo_x[1, 0] - self.velo_x[0, 0]) * (y_list[-1] - y_list[-2]))
@@ -304,7 +304,7 @@ class AmpcoroffFile:
 		"""
 
 		if xyvfileprefix is None:
-			xyvfileprefix = self.ini.result['geotiff_prefix']
+			xyvfileprefix = self.ini.rawoutput['label_geotiff']
 		if ref_raster is None:
 			ref_raster = SingleRaster(self.ini.imagepair['image1'], date=self.ini.imagepair['image1_date'])
 

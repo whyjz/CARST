@@ -19,6 +19,17 @@ except:
 from osgeo import osr
 # we assume the fpath is the file with .tif or .TIF suffix.
 
+def timeit(func):
+    def time_wrapper(*args, **kwargs):
+        time_a = datetime.now()
+        print('Program Start: {}'.format(time_a.strftime('%Y-%m-%d %H:%M:%S')))
+        dec_func = func(*args, **kwargs)
+        time_b = datetime.now()
+        print('Program End: {}'.format(time_b.strftime('%Y-%m-%d %H:%M:%S')))
+        print('Time taken: ' + str(time_b - time_a))
+        return dec_func
+    return time_wrapper
+
 class SingleRaster:
 
 	"""
@@ -530,6 +541,7 @@ class RasterVelos():
 		raster_mag_cutnoise.Array2Raster(mag_val_ok, self.mag)
 		self.SetMag(raster_mag_cutnoise)
 
+@timeit
 def Fahnestock_noise_remover(array, error_array, nodata_val=-9999.0):
 
 	# based on the algorithm of Fahnestock et al. (2015): Landsat 8 image processing

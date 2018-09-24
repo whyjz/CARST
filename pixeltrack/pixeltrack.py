@@ -58,11 +58,11 @@ if args.step == 'ampcor' or args.step is None:
 
 if args.step == 'rawvelo' or args.step is None:
 
-	ampoff = AmpcoroffFile(ini.result['ampcor_results'])
+	ampoff = AmpcoroffFile(ini.rawoutput['label_ampcor'])
 	ampoff.Load()
 	ampoff.SetIni(ini)
 	ampoff.Ampcoroff2Velo()
-	ampoff.Velo2XYV(generate_xyztext=ini.result['if_generate_xyztext'])
+	ampoff.Velo2XYV(generate_xyztext=ini.rawoutput['if_generate_xyztext'])
 	ampoff.XYV2Raster()
 
 if args.step == 'correctvelo' or args.step is None:
@@ -71,7 +71,7 @@ if args.step == 'correctvelo' or args.step is None:
 	# Maybe it will be included in the future release.
 
 	shp = ini.velocorrection['bedrock']
-	prefix = ini.result['geotiff_prefix']
+	prefix = ini.rawoutput['label_geotiff']
 	velo = RasterVelos(vx=SingleRaster(prefix + '_vx.tif'),
 		               vy=SingleRaster(prefix + '_vy.tif'),
 		               snr=SingleRaster(prefix + '_snr.tif'),
@@ -95,7 +95,7 @@ if args.step == 'rmnoise' or args.step is None:
 		prefix = ini.velocorrection['geotiff_prefix']
 		velo = RasterVelos(vx=SingleRaster(prefix + '_vx.tif'),
 		                   vy=SingleRaster(prefix + '_vy.tif'),
-		                   snr=SingleRaster(ini.result['geotiff_prefix'] + '_snr.tif'),
+		                   snr=SingleRaster(ini.rawoutput['label_geotiff'] + '_snr.tif'),
 		                   mag=SingleRaster(prefix + '_mag.tif'),
 		                   errx=SingleRaster(prefix + '_errx.tif'),
 		                   erry=SingleRaster(prefix + '_erry.tif'),
