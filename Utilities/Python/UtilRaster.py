@@ -220,8 +220,12 @@ class SingleRaster:
 		xaxis = np.unique(array[:,0])
 		yaxis = np.unique(array[:,1])
 		out_raster = driver.Create(self.fpath, len(xaxis),  len(yaxis), 1, gdal.GDT_Float32)
-		xspacing = np.unique(np.diff(xaxis))
-		yspacing = np.unique(np.diff(yaxis))
+		# here I rounded the number to the 6th decimal to get the spacing, since a small error (around 1e-10)
+		# would generate when reading the ampcor-off file.
+		xspacing = np.unique(np.diff(xaxis).round(decimals=7))
+		yspacing = np.unique(np.diff(yaxis).round(decimals=7))
+		# print(xspacing)
+		# print(yspacing)
 		if len(xspacing) == 1 and len(yspacing) == 1:
 			# assuming no rotation in the Affine transform
 			new_geotransform = (min(xaxis), xspacing[0], 0, max(yaxis), 0, -yspacing[0])
@@ -343,7 +347,11 @@ class SingleRaster:
 			# if no_data is None:
 			# 	no_data = 0.0
 			nodata = -9999.0
+		# print(out_image)
+		# print(out_image.data.shape)
+		# print(out_image.data)
 		clipped_data = out_image.data[0]
+		# PROBABLY HAVE TO CHANGE TO out_image[0] HERE
 		# extract the valid values
 		# and return them as a numpy 1-D array
 		return np.extract(clipped_data != nodata, clipped_data)

@@ -79,20 +79,20 @@ if args.step == 'correctvelo' or args.step is None:
 		               erry=SingleRaster(prefix + '_erry.tif'))
 
 	vxraw_bdval = ZArray(velo.vx.ClippedByPolygon(shp))
-	vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['histogram_x'])
+	vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx.png')
 
 	vyraw_bdval = ZArray(velo.vy.ClippedByPolygon(shp))
-	vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['histogram_y'])
+	vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vy.png')
 
-	velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini.velocorrection['logfile'], pngname=ini.velocorrection['xy_comparison_fig'] )
-	velo.VeloCorrection(vxraw_bdval, vyraw_bdval, ini.velocorrection['geotiff_prefix'])
+	velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini.velocorrection['label_logfile'], pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx-vs-vy.png' )
+	velo.VeloCorrection(vxraw_bdval, vyraw_bdval, ini.velocorrection['label_geotiff'])
 
 if args.step == 'rmnoise' or args.step is None:
 
 	try: 
 		velo
 	except NameError:
-		prefix = ini.velocorrection['geotiff_prefix']
+		prefix = ini.velocorrection['label_geotiff']
 		velo = RasterVelos(vx=SingleRaster(prefix + '_vx.tif'),
 		                   vy=SingleRaster(prefix + '_vy.tif'),
 		                   snr=SingleRaster(ini.rawoutput['label_geotiff'] + '_snr.tif'),
