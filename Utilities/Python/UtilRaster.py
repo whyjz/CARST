@@ -356,7 +356,7 @@ class SingleRaster:
 		# and return them as a numpy 1-D array
 		return np.extract(clipped_data != nodata, clipped_data)
 
-	def GaussianHighPass(self, sigma=3):
+	def GaussianHighPass(self, sigma=3, truncate=1.0):
 
 		"""
 		Gaussian High Pass filter. Default sigma = 3.
@@ -364,13 +364,39 @@ class SingleRaster:
 
 		from scipy.ndimage import gaussian_filter
 		data = self.ReadAsArray()
-		lowpass = gaussian_filter(data.astype(float), sigma)
+		data[data == self.GetNoDataValue()] = np.nan
+		lowpass = gaussian_filter(data.astype(float), sigma, truncate=truncate)
 		highpass = data - lowpass
-		hp_raster_path = self.fpath.rsplit('.', 1)[0] + '_GHP_' + str(sigma) + 'sig.tif'
+		hp_raster_path = self.fpath.rsplit('.', 1)[0] + '_GHP-' + str(sigma) + 'sig.tif'
 		hp_raster = SingleRaster(hp_raster_path)
 		hp_raster.Array2Raster(highpass, self)
 		self.SetPath(hp_raster_path)
 
+	def GaussianLowPass(self, sigma=1):
+
+		"""
+		Gaussian Low Pass filter. Default sigma = 1.
+		deal with nodata values.
+		https://stackoverflow.com/questions/18697532/gaussian-filtering-a-image-with-nan-in-python
+		"""
+
+		from scipy.ndimage import gaussian_filter
+		data = self.ReadAsArray()
+		# data[data == self.GetNoDataValue()] = np.nan
+		# lowpass = gaussian_filter(data.astype(float), sigma, truncate=truncate)
+		nodata_pos = data == self.GetNoDataValue()
+		data[nodata_pos] = 0
+		w = np.ones_like(data)
+		w[nodata_pos] = 0
+		vv = gaussian_filter(data.astype(float), sigma)
+		ww = gaussian_filter(w.astype(float), sigma)
+		ww[ww == 0] = np.finfo(float).eps
+		lowpass = vv / ww
+		lowpass[nodata_pos] = self.GetNoDataValue()
+		lp_raster_path = self.fpath.rsplit('.', 1)[0] + '_GLP-' + str(sigma) + 'sig.tif'
+		lp_raster = SingleRaster(lp_raster_path)
+		lp_raster.Array2Raster(lowpass, self)
+		self.SetPath(lp_raster_path)
 
 
 class RasterVelos():
@@ -537,17 +563,96 @@ class RasterVelos():
 		bad_pts = self.snr.ReadAsArray() <= snr_threshold
 		mag_val = self.mag.ReadAsArray()
 		mag_val[bad_pts] = -9999.0
-		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '_SNRnoise.tif')
+		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '_SNT.tif')
 		raster_mag_cutnoise.Array2Raster(mag_val, self.mag)
+		self.SetMag(raster_mag_cutnoise)
+
+	def Gaussian_CutNoise(self, sigma=1):
+		mag_val = self.mag.ReadAsArray()
+		mag_val_ok = Gussian_noise_remover(mag_val, sigma=sigma, nodata_val=self.mag.GetNoDataValue())
+		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '-GAU.tif')
+		raster_mag_cutnoise.Array2Raster(mag_val_ok, self.mag)
+		self.SetMag(raster_mag_cutnoise)
+
+	def MorphoOpen_CutNoise(self, iterations=1):
+		mag_val = self.mag.ReadAsArray()
+		mag_val_ok = MorphoOpen_noise_remover(mag_val, nodata_val=self.mag.GetNoDataValue(), iterations=1)
+		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '-MOR.tif')
+		raster_mag_cutnoise.Array2Raster(mag_val_ok, self.mag)
 		self.SetMag(raster_mag_cutnoise)
 
 	def Fahnestock_CutNoise(self):
 		mag_val = self.mag.ReadAsArray()
 		magerr_val = self.errmag.ReadAsArray()
 		mag_val_ok = Fahnestock_noise_remover(mag_val, magerr_val, nodata_val=-9999.0)
-		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '_FAHnoise.tif')
+		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '-FAH.tif')
 		raster_mag_cutnoise.Array2Raster(mag_val_ok, self.mag)
 		self.SetMag(raster_mag_cutnoise)
+
+	def MaskAllRasters(self):
+		mag_val = self.mag.ReadAsArray()
+		nodata = mag_val == self.mag.GetNoDataValue()
+		vx_val = self.vx.ReadAsArray()
+		vx_val[nodata] = self.vx.GetNoDataValue()
+		raster_vx_cutnoise = SingleRaster(self.mag.fpath.replace('mag', 'vx'))
+		raster_vx_cutnoise.Array2Raster(vx_val, self.vx)
+		self.SetVx(raster_vx_cutnoise)
+		vy_val = self.vy.ReadAsArray()
+		vy_val[nodata] = self.vy.GetNoDataValue()
+		raster_vy_cutnoise = SingleRaster(self.mag.fpath.replace('mag', 'vy'))
+		raster_vy_cutnoise.Array2Raster(vy_val, self.vy)
+		self.SetVy(raster_vy_cutnoise)
+		errx_val = self.errx.ReadAsArray()
+		errx_val[nodata] = self.errx.GetNoDataValue()
+		raster_errx_cutnoise = SingleRaster(self.mag.fpath.replace('mag', 'errx'))
+		raster_errx_cutnoise.Array2Raster(errx_val, self.errx)
+		self.SetErrx(raster_errx_cutnoise)
+		erry_val = self.erry.ReadAsArray()
+		erry_val[nodata] = self.erry.GetNoDataValue()
+		raster_erry_cutnoise = SingleRaster(self.mag.fpath.replace('mag', 'erry'))
+		raster_erry_cutnoise.Array2Raster(erry_val, self.erry)
+		self.SetErry(raster_erry_cutnoise)
+		errmag_val = self.errmag.ReadAsArray()
+		errmag_val[nodata] = self.errmag.GetNoDataValue()
+		raster_errmag_cutnoise = SingleRaster(self.mag.fpath.replace('mag', 'errmag'))
+		raster_errmag_cutnoise.Array2Raster(errmag_val, self.errmag)
+		self.SetErrmag(raster_errmag_cutnoise)
+
+
+@timeit
+def Gussian_noise_remover(array, sigma=1, nodata_val=-9999.0):
+
+	"""
+	Gaussian Low Pass filter. Default sigma = 1.
+	deal with nodata values.
+	https://stackoverflow.com/questions/18697532/gaussian-filtering-a-image-with-nan-in-python
+	"""
+
+	from scipy.ndimage import gaussian_filter
+	nodata_pos = array == nodata_val
+	array[nodata_pos] = 0
+	w = np.ones_like(array)
+	w[nodata_pos] = 0
+	vv = gaussian_filter(array.astype(float), sigma)
+	ww = gaussian_filter(w.astype(float), sigma)
+	ww[ww == 0] = np.finfo(float).eps
+	lowpass = vv / ww
+	lowpass[nodata_pos] = nodata_val
+	diff = np.abs(array - lowpass)
+	mask = diff >= 1
+	array[mask] = nodata_val
+	return array
+
+@timeit
+def MorphoOpen_noise_remover(array, nodata_val=-9999.0, iterations=1):
+
+	from scipy.ndimage import binary_opening
+	nodata_pos = array == nodata_val
+	bin_array = np.ones_like(array)
+	bin_array[nodata_pos] = 0
+	new_bin_array = binary_opening(bin_array, iterations=iterations, structure=np.ones((3,3)))
+	array[~new_bin_array] = nodata_val
+	return array
 
 @timeit
 def Fahnestock_noise_remover(array, error_array, nodata_val=-9999.0):
