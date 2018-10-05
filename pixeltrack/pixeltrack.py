@@ -75,6 +75,7 @@ if args.step == 'correctvelo' or args.step is None:
 	velo = RasterVelos(vx=SingleRaster(prefix + '_vx.tif'),
 		               vy=SingleRaster(prefix + '_vy.tif'),
 		               snr=SingleRaster(prefix + '_snr.tif'),
+		               mag=SingleRaster(prefix + '_mag.tif'),
 		               errx=SingleRaster(prefix + '_errx.tif'),
 		               erry=SingleRaster(prefix + '_erry.tif'))
 
@@ -103,7 +104,8 @@ if args.step == 'rmnoise' or args.step is None:
 
 	velo.SNR_CutNoise(snr_threshold=ini.noiseremoval['snr'])
 	velo.Gaussian_CutNoise()
-	velo.MorphoOpen_CutNoise()
+	velo.SmallObjects_CutNoise()
+	# velo.MorphoOpen_CutNoise()
 	# velo.Fahnestock_CutNoise()
 	velo.MaskAllRasters()
 

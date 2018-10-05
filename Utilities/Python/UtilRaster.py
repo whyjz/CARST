@@ -79,6 +79,13 @@ class SingleRaster:
 		dsband = ds.GetRasterBand(band)
 		return dsband.GetNoDataValue()
 
+	def SetNoDataValue(self, nodata_val, band=1):
+		ds = gdal.Open(self.fpath, gdal.GA_Update)
+		dsband = ds.GetRasterBand(band)
+		dsband.SetNoDataValue(nodata_val)
+		dsband.FlushCache()
+		ds = dsband = None
+
 	def GetProj4(self):
 
 		"""
@@ -364,8 +371,12 @@ class SingleRaster:
 
 		from scipy.ndimage import gaussian_filter
 		data = self.ReadAsArray()
-		data[data == self.GetNoDataValue()] = np.nan
-		lowpass = gaussian_filter(data.astype(float), sigma, truncate=truncate)
+		data = data.astype(float)
+		if self.GetNoDataValue() is not None:
+			data[data == self.GetNoDataValue()] = np.nan
+		else:
+			data[data == 0] = np.nan    # LS-8 case
+		lowpass = gaussian_filter(data, sigma, truncate=truncate)
 		highpass = data - lowpass
 		hp_raster_path = self.fpath.rsplit('.', 1)[0] + '_GHP-' + str(sigma) + 'sig.tif'
 		hp_raster = SingleRaster(hp_raster_path)
@@ -508,10 +519,16 @@ class RasterVelos():
 		vx_zarray and vy_zarray are ZArray objects.
 		'''
 
+		nodata_val = self.mag.GetNoDataValue()
+		nodata_pos = self.mag.ReadAsArray() == nodata_val
+
 		vx_val_corrected = self.vx.ReadAsArray() - vx_zarray.MAD_median
 		vy_val_corrected = self.vy.ReadAsArray() - vy_zarray.MAD_median
 		mag_val_corrected = np.sqrt(vx_val_corrected ** 2 + vy_val_corrected ** 2)
 
+		vx_val_corrected[nodata_pos] = nodata_val
+		vy_val_corrected[nodata_pos] = nodata_val
+		mag_val_corrected[nodata_pos] = nodata_val
 
 		raster_vx_corrected = SingleRaster(output_raster_prefix + '_vx.tif')
 		raster_vx_corrected.Array2Raster(vx_val_corrected, self.vx)
@@ -539,6 +556,7 @@ class RasterVelos():
 
 		if self.errx is not None:
 			errx_val_corrected = self.errx.ReadAsArray() + vx_zarray.MAD_std
+			errx_val_corrected[nodata_pos] = nodata_val
 			raster_errx_corrected = SingleRaster(output_raster_prefix + '_errx.tif')
 			raster_errx_corrected.Array2Raster(errx_val_corrected, self.errx)
 			self.SetErrx(raster_errx_corrected)
@@ -546,6 +564,7 @@ class RasterVelos():
 
 		if self.erry is not None:
 			erry_val_corrected = self.erry.ReadAsArray() + vy_zarray.MAD_std
+			erry_val_corrected[nodata_pos] = nodata_val
 			raster_erry_corrected = SingleRaster(output_raster_prefix + '_erry.tif')
 			raster_erry_corrected.Array2Raster(erry_val_corrected, self.erry)
 			self.SetErry(raster_erry_corrected)
@@ -555,6 +574,7 @@ class RasterVelos():
 				                   (vx_val_corrected ** 2 * errx_val_corrected ** 2 + vy_val_corrected ** 2 * erry_val_corrected ** 2)
 				                   / (vx_val_corrected ** 2 + vy_val_corrected ** 2)
 				                   )
+			errmag_val_corrected[nodata_pos] = nodata_val
 			raster_errmag_corrected = SingleRaster(output_raster_prefix + '_errmag.tif')
 			raster_errmag_corrected.Array2Raster(errmag_val_corrected, self.errx)
 			self.SetErrmag(raster_errmag_corrected)
@@ -562,7 +582,7 @@ class RasterVelos():
 	def SNR_CutNoise(self, snr_threshold=5):
 		bad_pts = self.snr.ReadAsArray() <= snr_threshold
 		mag_val = self.mag.ReadAsArray()
-		mag_val[bad_pts] = -9999.0
+		mag_val[bad_pts] = self.mag.GetNoDataValue()
 		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '_SNT.tif')
 		raster_mag_cutnoise.Array2Raster(mag_val, self.mag)
 		self.SetMag(raster_mag_cutnoise)
@@ -578,6 +598,14 @@ class RasterVelos():
 		mag_val = self.mag.ReadAsArray()
 		mag_val_ok = MorphoOpen_noise_remover(mag_val, nodata_val=self.mag.GetNoDataValue(), iterations=1)
 		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '-MOR.tif')
+		raster_mag_cutnoise.Array2Raster(mag_val_ok, self.mag)
+		self.SetMag(raster_mag_cutnoise)
+
+	def SmallObjects_CutNoise(self, min_size=17):
+		from skimage.morphology import remove_small_objects
+		mag_val = self.mag.ReadAsArray()
+		mag_val_ok = SmallObjects_noise_remover(mag_val, nodata_val=self.mag.GetNoDataValue(), min_size=min_size)
+		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '-RSO.tif')
 		raster_mag_cutnoise.Array2Raster(mag_val_ok, self.mag)
 		self.SetMag(raster_mag_cutnoise)
 
@@ -644,6 +672,17 @@ def Gussian_noise_remover(array, sigma=1, nodata_val=-9999.0):
 	return array
 
 @timeit
+def SmallObjects_noise_remover(array, nodata_val=-9999.0, min_size=17):
+
+	from skimage.morphology import remove_small_objects
+	nodata_pos = array == nodata_val
+	bin_array = np.ones_like(array)
+	bin_array[nodata_pos] = 0
+	new_bin_array = remove_small_objects(bin_array.astype(bool), min_size=min_size)
+	array[~new_bin_array] = nodata_val
+	return array
+
+@timeit
 def MorphoOpen_noise_remover(array, nodata_val=-9999.0, iterations=1):
 
 	from scipy.ndimage import binary_opening
@@ -653,6 +692,8 @@ def MorphoOpen_noise_remover(array, nodata_val=-9999.0, iterations=1):
 	new_bin_array = binary_opening(bin_array, iterations=iterations, structure=np.ones((3,3)))
 	array[~new_bin_array] = nodata_val
 	return array
+
+from skimage.morphology import remove_small_objects
 
 @timeit
 def Fahnestock_noise_remover(array, error_array, nodata_val=-9999.0):

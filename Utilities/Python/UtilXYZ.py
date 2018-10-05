@@ -48,6 +48,10 @@ class ZArray(np.ndarray):
 		else:
 			offset_median = np.median(self)
 			offset_mad = mad(self)
+			if offset_mad == 0:
+				# the case when over half of the numbers are at the median number,
+				# we use the Median absolute deviation around the mean instead of around the median.
+				offset_mad = 1.482 * np.median(abs(self - np.mean(self)))
 			lbound = offset_median - mad_multiplier * offset_mad
 			ubound = offset_median + mad_multiplier * offset_mad
 			self.MAD_idx = np.logical_and(self > lbound, self < ubound)
@@ -270,8 +274,8 @@ class AmpcoroffFile:
 			y_list = np.unique(self.velo_x[:, 1])
 			spatialres = np.sqrt((self.velo_x[1, 0] - self.velo_x[0, 0]) * (y_list[-1] - y_list[-2]))
 
-		x = np.arange(self.velo_x[0, 0], self.velo_x[-1, 0], spatialres)
-		y = np.arange(self.velo_x[0, 1], self.velo_x[-1, 1], -spatialres)
+		x = np.arange(min(self.velo_x[:, 0]), max(self.velo_x[:, 0]), spatialres)
+		y = np.arange(max(self.velo_x[:, 1]), min(self.velo_x[:, 1]), -spatialres)
 		xx, yy = np.meshgrid(x, y)
 
 		vx = griddata(self.velo_x[:, [0,1]], self.velo_x[:, 2], (xx, yy), method='linear')
@@ -316,6 +320,15 @@ class AmpcoroffFile:
 		# vy_gtiff = vy_xyz.replace('xyz', 'tif')
 		# mag_gtiff = mag_xyz.replace('xyz', 'tif')
 
+		nodata_val = -9999.0
+
+		self.xyv_velo_x[np.isnan(self.xyv_velo_x)]  = nodata_val
+		self.xyv_velo_y[np.isnan(self.xyv_velo_y)]  = nodata_val
+		self.xyv_mag[np.isnan(self.xyv_mag)]  = nodata_val
+		self.xyv_snr[np.isnan(self.xyv_snr)]  = nodata_val
+		self.xyv_err_x[np.isnan(self.xyv_err_x)]  = nodata_val
+		self.xyv_err_y[np.isnan(self.xyv_err_y)]  = nodata_val
+
 		vx_gtiff = xyvfileprefix + '_vx.tif'
 		vy_gtiff = xyvfileprefix + '_vy.tif'
 		mag_gtiff = xyvfileprefix + '_mag.tif'
@@ -344,5 +357,12 @@ class AmpcoroffFile:
 		snrraster.XYZArray2Raster(self.xyv_snr, projection=proj)
 		errxraster.XYZArray2Raster(self.xyv_err_x, projection=proj)
 		erryraster.XYZArray2Raster(self.xyv_err_y, projection=proj)
+
+		xraster.SetNoDataValue(nodata_val)
+		yraster.SetNoDataValue(nodata_val)
+		magraster.SetNoDataValue(nodata_val)
+		snrraster.SetNoDataValue(nodata_val)
+		errxraster.SetNoDataValue(nodata_val)
+		errxraster.SetNoDataValue(nodata_val)
 
 
