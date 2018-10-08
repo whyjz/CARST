@@ -357,7 +357,10 @@ class SingleRaster:
 		# print(out_image)
 		# print(out_image.data.shape)
 		# print(out_image.data)
-		clipped_data = out_image.data[0]
+		try:
+			clipped_data = out_image.data[0]
+		except NotImplementedError:
+			clipped_data = out_image[0]
 		# PROBABLY HAVE TO CHANGE TO out_image[0] HERE
 		# extract the valid values
 		# and return them as a numpy 1-D array
