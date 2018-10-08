@@ -8,6 +8,7 @@ from mroipac.ampcor.Ampcor import Ampcor
 import multiprocessing as mp
 from functools import partial
 import numpy as np
+import pickle
 
 class Ampcor_Corrected(Ampcor):
 
@@ -124,7 +125,9 @@ def writeout_ampcor_task(task_result, ini):
 	cov3 = np.hstack([np.array(i.getCov3()) for i in task_result])
 	cov = np.stack([cov1, cov2, cov3])
 	complete_set = np.concatenate([field, cov.T], axis = 1)
-	np.savetxt(ini.rawoutput['label_ampcor'], complete_set, delimiter=" ", fmt='%5d %10.6f %5d %10.6f %10.6f %11.6f %11.6f %11.6f')
+	pickle.dump(complete_set, open(ini.rawoutput['label_ampcor'] + '.p', 'wb'))
+	if ini.rawoutput['if_generate_ampofftxt']:
+		np.savetxt(ini.rawoutput['label_ampcor'] + '.txt', complete_set, delimiter=" ", fmt='%5d %10.6f %5d %10.6f %10.6f %11.6f %11.6f %11.6f')
 
 # ===== params that have not been addressed yet
 # complex number

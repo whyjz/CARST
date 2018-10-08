@@ -58,7 +58,7 @@ if args.step == 'ampcor' or args.step is None:
 
 if args.step == 'rawvelo' or args.step is None:
 
-	ampoff = AmpcoroffFile(ini.rawoutput['label_ampcor'])
+	ampoff = AmpcoroffFile(ini.rawoutput['label_ampcor'] + '.p')
 	ampoff.Load()
 	ampoff.SetIni(ini)
 	ampoff.Ampcoroff2Velo()
@@ -104,7 +104,7 @@ if args.step == 'rmnoise' or args.step is None:
 
 	velo.SNR_CutNoise(snr_threshold=ini.noiseremoval['snr'])
 	velo.Gaussian_CutNoise()
-	velo.SmallObjects_CutNoise()
+	velo.SmallObjects_CutNoise(min_size=ini.noiseremoval['min_clump_size'])
 	# velo.MorphoOpen_CutNoise()
 	# velo.Fahnestock_CutNoise()
 	velo.MaskAllRasters()

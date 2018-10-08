@@ -173,6 +173,10 @@ class ConfParams:
 				self.rawoutput['if_generate_xyztext'] = bool(int(self.rawoutput['if_generate_xyztext']))
 			else:
 				self.rawoutput['if_generate_xyztext'] = False
+			if 'if_generate_ampofftxt' in self.rawoutput:
+				self.rawoutput['if_generate_ampofftxt'] = bool(int(self.rawoutput['if_generate_ampofftxt']))
+			else:
+				self.rawoutput['if_generate_ampofftxt'] = False
 			if 'label_ampcor' in self.rawoutput:
 				if self.outputcontrol['datepair_prefix']:
 					self.rawoutput['label_ampcor'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.rawoutput['label_ampcor'])

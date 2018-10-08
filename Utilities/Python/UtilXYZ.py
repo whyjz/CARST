@@ -198,7 +198,9 @@ class AmpcoroffFile:
 		column 8: Conv 3
 		"""
 
-		self.data = np.loadtxt(self.fpath)
+		import pickle
+		self.data = pickle.load(open(self.fpath, 'rb'))
+		# self.data = np.loadtxt(self.fpath)
 		self.CheckData()
 
 	def CheckData(self):
