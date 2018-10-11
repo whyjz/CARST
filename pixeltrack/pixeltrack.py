@@ -79,10 +79,16 @@ if args.step == 'correctvelo' or args.step is None:
 		               errx=SingleRaster(prefix + '_errx.tif'),
 		               erry=SingleRaster(prefix + '_erry.tif'))
 
+	# SNR constraint
+	snr_bdval = ZArray(velo.snr.ClippedByPolygon(shp))
+	selected_bd_pos = snr_bdval >= ini.noiseremoval['snr']
+
 	vxraw_bdval = ZArray(velo.vx.ClippedByPolygon(shp))
+	vxraw_bdval = vxraw_bdval[selected_bd_pos]
 	vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx.png')
 
 	vyraw_bdval = ZArray(velo.vy.ClippedByPolygon(shp))
+	vyraw_bdval = vyraw_bdval[selected_bd_pos]
 	vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vy.png')
 
 	velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini.velocorrection['label_logfile'], pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx-vs-vy.png' )
