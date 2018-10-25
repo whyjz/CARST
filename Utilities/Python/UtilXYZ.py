@@ -12,8 +12,6 @@ from scipy.interpolate import griddata
 
 class ZArray(np.ndarray):
 
-	import matplotlib.pyplot as plt
-
 	# A subclass from ndarray, with some new attributes and fancier methods for our purposes
 	# please see
 	# https://docs.scipy.org/doc/numpy-1.13.0/user/basics.subclassing.html
@@ -28,6 +26,9 @@ class ZArray(np.ndarray):
 		obj.MAD_mean = None
 		obj.MAD_median = None
 		obj.MAD_std = None
+		# obj.signal_val = None
+		# obj.signal_n = None
+		obj.signal_array = None
 		return obj
 
 	def __array_finalize__(self, obj):
@@ -36,6 +37,9 @@ class ZArray(np.ndarray):
 		self.MAD_mean   = getattr(obj, 'MAD_mean', None)
 		self.MAD_median = getattr(obj, 'MAD_median', None)
 		self.MAD_std    = getattr(obj, 'MAD_std', None)
+		# self.signal_val = getattr(obj, 'signal_val', None)
+		# self.signal_n   = getattr(obj, 'signal_n', None)
+		self.signal_array = getattr(obj, 'signal_array', None)
 
 	# =============================================================================================
 	# ==== The following functions are designed firstly for the functions in the class XYZFile ====
@@ -44,22 +48,35 @@ class ZArray(np.ndarray):
 	# =============================================================================================
 
 	# Major Rehaul on Oct 25, 2018, added the background correction 
-	def StatisticOutput(self, plot=True, mad_multiplier=3.0, pngname=None):
+	# the default of mad_multiplier was 3.0
+	def StatisticOutput(self, plot=True, mad_multiplier=5.0, pngname=None):
 		mad = lambda x : 1.482 * np.median(abs(x - np.median(x)))
 		if self.size == 0:
 			print('WARNING: there is no Z records.')
 			return [], np.nan, np.nan, np.nan
 		else:
-			offset_median = np.median(self)
-			offset_mad = mad(self)
+			uniq, uniq_n = np.unique(self, return_counts=True)
+			uniq_n_est, _, _ = backcor(uniq, uniq_n)
+			background_mad = mad(uniq_n - uniq_n_est)    # this is actually the noise level
+			background_threshold = uniq_n_est + mad_multiplier * background_mad
+			signal_idx = np.argwhere(uniq_n >= background_threshold)
+			signal_idx = np.ndarray.flatten(signal_idx)
+			signal_val = uniq[signal_idx]
+			# self.signal_val = uniq[signal_idx]
+			signal_n = uniq_n[signal_idx]
+			# self.signal_n = uniq_n[signal_idx]
+			self.signal_array = np.repeat(signal_val, signal_n)
+
+			offset_median = np.median(self.signal_array)
+			offset_mad = mad(self.signal_array)
 			if offset_mad == 0:
 				# the case when over half of the numbers are at the median number,
 				# we use the Median absolute deviation around the mean instead of around the median.
-				offset_mad = 1.482 * np.median(abs(self - np.mean(self)))
+				offset_mad = 1.482 * np.median(abs(self.signal_array - np.mean(self.signal_array)))
 			lbound = offset_median - mad_multiplier * offset_mad
 			ubound = offset_median + mad_multiplier * offset_mad
-			self.MAD_idx = np.logical_and(self > lbound, self < ubound)
-			trimmed_numlist = self[self.MAD_idx]
+			self.MAD_idx = np.logical_and(self.signal_array > lbound, self.signal_array < ubound)
+			trimmed_numlist = self.signal_array[self.MAD_idx]
 			self.MAD_mean = trimmed_numlist.mean()
 			self.MAD_median = np.median(trimmed_numlist)
 			self.MAD_std = trimmed_numlist.std(ddof=1)
@@ -68,6 +85,9 @@ class ZArray(np.ndarray):
 			# return idx2, trimmed_numlist.mean(), np.median(trimmed_numlist), trimmed_numlist.std(ddof=1)
 
 	def HistWithOutliers(self, pngname, histogram_bound=10):
+
+		import matplotlib.pyplot as plt
+
 		nbins = len(self) // 4 + 1
 		nbins = 201 if nbins > 201 else nbins
 		lbound = min(self) if min(self) >= -histogram_bound else -histogram_bound
@@ -76,7 +96,7 @@ class ZArray(np.ndarray):
 			lbound = min(self)
 			rbound = max(self)
 		bins = np.linspace(lbound, rbound, nbins)
-		trimmed_numlist = self[self.MAD_idx]
+		trimmed_numlist = self.signal_array[self.MAD_idx]
 		N_outside_lbound_red = int(sum(self < lbound))
 		N_outside_rbound_red = int(sum(self > rbound))
 		N_outside_lbound_blue = int(sum(trimmed_numlist < lbound))
@@ -370,7 +390,7 @@ class AmpcoroffFile:
 		errxraster.SetNoDataValue(nodata_val)
 
 
-def backcor(n, y, ord=4, s=0.01, fct='sh'):
+def backcor(n, y, order=4, s=0.01, fct='sh'):
 	# from backcor.m, https://www.mathworks.com/matlabcentral/fileexchange/27429-background-correction
 	# Impletion using Python by Whyjay, Oct 25, 2018
 
