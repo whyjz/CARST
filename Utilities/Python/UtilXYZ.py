@@ -12,6 +12,8 @@ from scipy.interpolate import griddata
 
 class ZArray(np.ndarray):
 
+	import matplotlib.pyplot as plt
+
 	# A subclass from ndarray, with some new attributes and fancier methods for our purposes
 	# please see
 	# https://docs.scipy.org/doc/numpy-1.13.0/user/basics.subclassing.html
@@ -40,6 +42,8 @@ class ZArray(np.ndarray):
 	# ==== and later is has modified to a QGIS processing scripts called MAD_outlier_filter.py ====
 	# ==== now we have copied them back. ==========================================================
 	# =============================================================================================
+
+	# Major Rehaul on Oct 25, 2018, added the background correction 
 	def StatisticOutput(self, plot=True, mad_multiplier=3.0, pngname=None):
 		mad = lambda x : 1.482 * np.median(abs(x - np.median(x)))
 		if self.size == 0:
@@ -64,8 +68,6 @@ class ZArray(np.ndarray):
 			# return idx2, trimmed_numlist.mean(), np.median(trimmed_numlist), trimmed_numlist.std(ddof=1)
 
 	def HistWithOutliers(self, pngname, histogram_bound=10):
-
-		import matplotlib.pyplot as plt
 		nbins = len(self) // 4 + 1
 		nbins = 201 if nbins > 201 else nbins
 		lbound = min(self) if min(self) >= -histogram_bound else -histogram_bound
@@ -368,3 +370,102 @@ class AmpcoroffFile:
 		errxraster.SetNoDataValue(nodata_val)
 
 
+def backcor(n, y, ord=4, s=0.01, fct='sh'):
+	# from backcor.m, https://www.mathworks.com/matlabcentral/fileexchange/27429-background-correction
+	# Impletion using Python by Whyjay, Oct 25, 2018
+
+	# Note: 'ah', 'stq', and 'atq' are not finalized yet, so it will generate an error.
+
+	# Credits (from backcor.m):
+	# For more informations, see:
+	# - V. Mazet, C. Carteret, D. Brie, J. Idier, B. Humbert. Chemom. Intell. Lab. Syst. 76 (2), 2005.
+	# - V. Mazet, D. Brie, J. Idier. Proceedings of EUSIPCO, pp. 305-308, 2004.
+	# - V. Mazet. PhD Thesis, University Henri Poincaré Nancy 1, 2005.
+	# 
+	# 22-June-2004, Revised 19-June-2006, Revised 30-April-2010,
+	# Revised 12-November-2012 (thanks E.H.M. Ferreira!)
+	# Comments and questions to: vincent.mazet@unistra.fr.
+	#
+	# Usage (fram backcor.m):
+	# BACKCOR   Background estimation by minimizing a non-quadratic cost function.
+
+	# [EST,COEFS,IT] = BACKCOR(N,Y,ORDER,THRESHOLD,FUNCTION) computes and estimation EST
+	# of the background (aka. baseline) in a spectroscopic signal Y with wavelength N.
+	# The background is estimated by a polynomial with order ORDER using a cost-function
+	# FUNCTION with parameter THRESHOLD. FUNCTION can have the four following values:
+	#     'sh'  - symmetric Huber function :  f(x) = { x^2  if abs(x) < THRESHOLD,
+	#                                                { 2*THRESHOLD*abs(x)-THRESHOLD^2  otherwise.
+	#     'ah'  - asymmetric Huber function :  f(x) = { x^2  if x < THRESHOLD,
+	#                                                 { 2*THRESHOLD*x-THRESHOLD^2  otherwise.
+	#     'stq' - symmetric truncated quadratic :  f(x) = { x^2  if abs(x) < THRESHOLD,
+	#                                                     { THRESHOLD^2  otherwise.
+	#     'atq' - asymmetric truncated quadratic :  f(x) = { x^2  if x < THRESHOLD,
+	#                                                      { THRESHOLD^2  otherwise.
+	# COEFS returns the ORDER+1 vector of the estimated polynomial coefficients
+	# (computed with n sorted and bounded in [-1,1] and y bounded in [0,1]).
+	# IT returns the number of iterations.
+
+	# Check arguments
+	# if nargin < 2, error('backcor:NotEnoughInputArguments','Not enough input arguments'); end;
+	# if nargin < 5, [z,a,it,order,s,fct] = backcorgui(n,y); return; end; % delete this line if you do not need GUI
+	if fct not in ['sh', 'ah', 'stq', 'atq']:
+		raise ValueError('Unknown function.')
+
+	# Rescaling
+	N = len(n)
+	i = np.argsort(n)
+	n = n[i]
+	y = y[i]
+	maxy = max(y)
+	dely = (maxy - min(y)) / 2
+	n = 2 * (n[:] - n[-1]) / (n[-1] - n[0]) + 1;
+	y = (y[:] - maxy) / dely + 1;
+
+	# Vandermonde matrix
+	p = np.linspace(0, order, order+1)
+	temp1 = np.tile(n, (order + 1, 1)).T
+	temp2 = np.tile(p, (N, 1))
+	T = np.tile(n, (order + 1, 1)).T ** np.tile(p, (N, 1))
+	Tinv = np.matmul(np.linalg.pinv(np.matmul(T.T, T)), T.T)
+
+	# Initialisation (least-squares estimation)
+	a = np.matmul(Tinv, y)
+	z = np.matmul(T, a)
+
+	# Other variables
+	alpha = 0.99 * 1/2      # Scale parameter alpha
+	it = 0                  # Iteration number
+	zp = np.ones((1, N))    # Previous estimation
+
+	# LEGEND
+	while np.sum((z - zp) ** 2) / np.sum(zp ** 2) > 1e-9:
+
+		it += 1             # Iteration number
+		zp = z[:]           # Previous estimation
+		res = y - z         # Residual
+
+		# Estimate d
+		if fct == 'sh':
+			d = (res * (2 * alpha - 1)) * (abs(res) < s) + (-alpha * 2 * s - res) * (res <= -s) + (alpha * 2 * s - res) * (res >= s)
+		elif fct == 'ah':
+			raise ValueError('This has not implemented yet.')
+			# d = (res*(2*alpha-1)) .* (res<s) + (alpha*2*s-res) .* (res>=s)
+		elif fct == 'stq':
+			raise ValueError('This has not implemented yet.')
+			# d = (res*(2*alpha-1)) .* (abs(res)<s) - res .* (abs(res)>=s)
+		elif fct == 'atq':
+			raise ValueError('This has not implemented yet.')
+			# d = (res*(2*alpha-1)) .* (res<s) - res .* (res>=s)
+
+		# Estimate z
+		a = np.matmul(Tinv, y + d)   # Polynomial coefficients a
+		z = np.matmul(T, a)          # Polynomial
+
+	# Rescaling
+	j = np.argsort(i)
+	z = (z[j] - 1) * dely + maxy
+
+	a[0] -= 1
+	a *= dely
+
+	return z, a, it
