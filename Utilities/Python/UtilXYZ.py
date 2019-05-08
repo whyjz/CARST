@@ -63,6 +63,11 @@ class ZArray(np.ndarray):
 
 
 			uniq, uniq_n = np.unique(self, return_counts=True)
+			# ---- Verification of the sub-pixel sampling rate
+			# def_sampling_rate = ini.pxsettings['oversampling'] * 10   # sampling rate defined in the ini file
+			# real_sampling_rate = 
+
+			# ----
 			uniq_n_est, _, _ = backcor(uniq, uniq_n)
 			background_mad = mad(uniq_n - uniq_n_est)    # this is actually the noise level
 			background_threshold = uniq_n_est + mad_multiplier * background_mad
@@ -247,7 +252,38 @@ class AmpcoroffFile:
 
 		self.ini = ini
 
-	def Ampcoroff2Velo(self, ref_raster=None, datedelta=None):
+	def FillwithNAN(self):
+		"""
+		Fill hole with nan value.
+		"""
+		x_linenum = np.arange(min(self.data[:, 0]), max(self.data[:, 0]) + self.ini.pxsettings['skip_across'], self.ini.pxsettings['skip_across'])
+		y_linenum = np.unique(self.data[:, 2])
+		xx_linenum, yy_linenum = np.meshgrid(x_linenum, y_linenum)
+		complete_xymap = np.vstack((xx_linenum.flatten(), yy_linenum.flatten())).T
+		raw_xymap = self.data[:, [0, 2]]
+
+		# ---- collapse x & y linenumber to a 1-d array. 
+		#### NOTE THIS WILL GO WRONG IF YOU HAVE A SUPER HUGE ARRAY!
+
+		cxy = complete_xymap[:, 0] * 1000000 + complete_xymap[:, 1]
+		rxy = raw_xymap[:, 0] * 1000000 + raw_xymap[:, 1]
+		# ----
+
+		idx = np.where(np.isin(cxy, rxy))
+		idx = idx[0]
+		newdata = np.empty((complete_xymap.shape[0],8))
+		newdata[:] = np.nan
+		newdata[:,[0,2]] = complete_xymap
+		newdata[idx,1] = self.data[:, 1]
+		newdata[idx,3] = self.data[:, 3]
+		newdata[idx,4] = self.data[:, 4]
+		newdata[idx,5] = self.data[:, 5]
+		newdata[idx,6] = self.data[:, 6]
+		newdata[idx,7] = self.data[:, 7]
+
+		self.data = newdata
+
+	def Ampcoroff2Velo(self, ref_raster=None, datedelta=None, velo_or_pixel='velo'):
 
 		"""
 		ref_raster: a SingleRaster object that is used for this pixel tracking
@@ -276,18 +312,27 @@ class AmpcoroffFile:
 		uly = geot[3]
 		xres = geot[1]
 		yres = geot[5]
-		self.data[:, 0] = ulx + (self.data[:, 0] - 1) * xres
-		self.data[:, 1] = self.data[:, 1] * abs(xres) / datedelta.days
-		self.data[:, 2] = uly + (self.data[:, 2] - 1) * yres
-		self.data[:, 3] = self.data[:, 3] * abs(yres) / datedelta.days
-		self.data[:, 5] = np.sqrt(self.data[:, 5]) / datedelta.days
-		self.data[:, 6] = np.sqrt(self.data[:, 6]) / datedelta.days
 
-		self.velo_x = self.data[:,[0,2,1]]
-		self.velo_y = self.data[:,[0,2,3]]
-		self.snr    = self.data[:,[0,2,4]]
-		self.err_x  = self.data[:,[0,2,5]]
-		self.err_y  = self.data[:,[0,2,6]]
+		if velo_or_pixel == 'velo':
+			self.data[:, 0] = ulx + (self.data[:, 0] - 1) * xres
+			self.data[:, 1] = self.data[:, 1] * abs(xres) / datedelta.days
+			self.data[:, 2] = uly + (self.data[:, 2] - 1) * yres
+			self.data[:, 3] = self.data[:, 3] * abs(yres) / datedelta.days
+			self.data[:, 5] = np.sqrt(self.data[:, 5]) / datedelta.days
+			self.data[:, 6] = np.sqrt(self.data[:, 6]) / datedelta.days
+			self.velo_x = self.data[:,[0,2,1]]
+			self.velo_y = self.data[:,[0,2,3]]
+			self.snr    = self.data[:,[0,2,4]]
+			self.err_x  = self.data[:,[0,2,5]]
+			self.err_y  = self.data[:,[0,2,6]]
+		elif velo_or_pixel == 'pixel':
+			self.data[:, 0] = ulx + (self.data[:, 0] - 1) * xres
+			self.data[:, 2] = uly + (self.data[:, 2] - 1) * yres
+			self.velo_x = self.data[:,[0,2,1]]
+			self.velo_y = self.data[:,[0,2,3]]
+			self.snr    = self.data[:,[0,2,4]]
+			self.err_x  = self.data[:,[0,2,5]]
+			self.err_y  = self.data[:,[0,2,6]]
 
 
 	def Velo2XYV(self, xyvfileprefix=None, spatialres=None, generate_xyztext=False):
@@ -396,6 +441,33 @@ class AmpcoroffFile:
 		snrraster.SetNoDataValue(nodata_val)
 		errxraster.SetNoDataValue(nodata_val)
 		errxraster.SetNoDataValue(nodata_val)
+
+
+def points_in_polygon(points_geometry, shp_filename):
+	# points_geometry: N-by-2 np array defining the geometry of points
+	# shp_filename: shapefile name 
+	# Both datasets should have the SAME CRS!
+
+	# return: np mask array showing where the targeted points are.
+
+	import geopandas as gpd
+	from shapely.geometry import Point
+	# from shapely.geometry import mapping
+
+	shapefile = gpd.read_file(shp_filename)
+	poly_geometries = [shapefile.ix[i]['geometry'] for i in range(len(shapefile))]
+	pt_geometries = [Point(xy) for xy in zip(points_geometry[:, 0], points_geometry[:, 1])]
+	pt_gs = gpd.GeoSeries(pt_geometries)
+
+	idx = None
+	for single_poly in poly_geometries:
+		if idx is None:
+			idx = pt_gs.within(single_poly)
+		else:
+			tmp = pt_gs.within(single_poly)
+			idx = np.logical_or(idx, tmp)
+
+	return idx
 
 
 def backcor(n, y, order=4, s=0.01, fct='sh'):
