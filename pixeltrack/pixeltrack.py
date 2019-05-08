@@ -83,13 +83,24 @@ if args.step == 'correctvelo' or args.step is None:
 	snr_bdval = ZArray(velo.snr.ClippedByPolygon(shp))
 	selected_bd_pos = snr_bdval >= ini.noiseremoval['snr']
 
+	# Get raw X & Y resolution for calculating histogram bins
+	# tmp = SingleRaster(ini.imagepair['image1'])
+	# xres = tmp.GetXRes()
+	# yres = tmp.GetYRes()
+	# ini.pxsettings['searchwindow_x'] * 2
+	# time 
+	# -> to be continued (see UtilXYZ as well)
+
+
+
+	# Extract points over bedrock
 	vxraw_bdval = ZArray(velo.vx.ClippedByPolygon(shp))
 	vxraw_bdval = vxraw_bdval[selected_bd_pos]
-	vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx.png')
+	vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx.png', ini=ini)
 
 	vyraw_bdval = ZArray(velo.vy.ClippedByPolygon(shp))
 	vyraw_bdval = vyraw_bdval[selected_bd_pos]
-	vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vy.png')
+	vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vy.png', ini=ini)
 
 	velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini.velocorrection['label_logfile'], pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx-vs-vy.png' )
 	velo.VeloCorrection(vxraw_bdval, vyraw_bdval, ini.velocorrection['label_geotiff'])

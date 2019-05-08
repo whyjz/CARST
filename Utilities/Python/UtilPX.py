@@ -119,6 +119,13 @@ def ampcor_task(imgpair, ini):
 
 def writeout_ampcor_task(task_result, ini):
 	field_list = [np.array(i.getOffsetField().unpackOffsets()) for i in task_result]
+	# vvvv---- zero field size detection
+	field_size = np.array([i.size for i in field_list])
+	field_size_zero_idx = np.where(field_size == 0)[0]
+	if field_size_zero_idx.size != 0:
+		for i in reversed(field_size_zero_idx):
+			del field_list[i]
+	# ^^^^----
 	field = np.vstack(field_list)
 	cov1 = np.hstack([np.array(i.getCov1()) for i in task_result])
 	cov2 = np.hstack([np.array(i.getCov2()) for i in task_result])

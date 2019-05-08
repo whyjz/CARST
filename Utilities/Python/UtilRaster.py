@@ -74,6 +74,16 @@ class SingleRaster:
 		ds = gdal.Open(self.fpath)
 		return ds.GetGeoTransform()
 
+	def GetXRes(self):
+		ds = gdal.Open(self.fpath)
+		geot = ds.GetGeoTransform()
+		return geot[1]
+
+	def GetYRes(self):
+		ds = gdal.Open(self.fpath)
+		geot = ds.GetGeoTransform()
+		return geot[-1]
+
 	def GetNoDataValue(self, band=1):
 		ds = gdal.Open(self.fpath)
 		dsband = ds.GetRasterBand(band)

@@ -9,6 +9,7 @@
 import numpy as np
 from UtilRaster import SingleRaster
 from scipy.interpolate import griddata
+import pickle
 
 class ZArray(np.ndarray):
 
@@ -49,12 +50,18 @@ class ZArray(np.ndarray):
 
 	# Major Rehaul on Oct 25, 2018, added the background correction 
 	# the default of mad_multiplier was 3.0
-	def StatisticOutput(self, plot=True, mad_multiplier=5.0, pngname=None):
+	# background correction redesigned on Nov 9, 2018 using more information from the PX
+	def StatisticOutput(self, plot=True, mad_multiplier=5.0, pngname=None, ini=None):
 		mad = lambda x : 1.482 * np.median(abs(x - np.median(x)))
 		if self.size == 0:
 			print('WARNING: there is no Z records.')
 			return [], np.nan, np.nan, np.nan
 		else:
+			# if ini is not None:
+			# 	ref_raster = SingleRaster(ini.imagepair['image1'])
+			# 	-> to be continued
+
+
 			uniq, uniq_n = np.unique(self, return_counts=True)
 			uniq_n_est, _, _ = backcor(uniq, uniq_n)
 			background_mad = mad(uniq_n - uniq_n_est)    # this is actually the noise level
@@ -82,6 +89,7 @@ class ZArray(np.ndarray):
 			self.MAD_std = trimmed_numlist.std(ddof=1)
 			if plot == True and pngname is not None:
 				self.HistWithOutliers(pngname)
+				pickle.dump(self, open(pngname.replace('.png', '.p'), 'wb'))
 			# return idx2, trimmed_numlist.mean(), np.median(trimmed_numlist), trimmed_numlist.std(ddof=1)
 
 	def HistWithOutliers(self, pngname, histogram_bound=10):
