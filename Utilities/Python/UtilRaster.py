@@ -483,16 +483,42 @@ class RasterVelos():
 		else:
 			self.mag_val = np.sqrt(self.vx.ReadAsArray() ** 2 + self.vy.ReadAsArray() ** 2)
 
-	def VeloCorrectionInfo(self, vx_zarray, vy_zarray, logfile, pngname=None):
+	def VeloCorrectionInfo(self, vx_zarray, vy_zarray, ini, pngname=None):
 
-		with open(logfile, 'w') as f:
+		a = SingleRaster(ini.imagepair['image1'], date=ini.imagepair['image1_date'])
+		b = SingleRaster(ini.imagepair['image2'], date=ini.imagepair['image2_date'])
+		datedelta = b.date - a.date
+		geot = a.GetGeoTransform()
+		xres = geot[1]
+		yres = geot[5]
+
+		vx_zarray_velo = vx_zarray[:]
+		vx_zarray_velo            = vx_zarray_velo            * abs(xres) / datedelta.days
+		vx_zarray_velo.MAD_median = vx_zarray_velo.MAD_median * abs(xres) / datedelta.days
+		vx_zarray_velo.MAD_std    = vx_zarray_velo.MAD_std    * abs(xres) / datedelta.days
+		vx_zarray_velo.MAD_mean   = vx_zarray_velo.MAD_mean   * abs(xres) / datedelta.days
+		vy_zarray_velo = vy_zarray[:]
+		vy_zarray_velo            = vy_zarray_velo            * abs(yres) / datedelta.days
+		vy_zarray_velo.MAD_median = vy_zarray_velo.MAD_median * abs(yres) / datedelta.days
+		vy_zarray_velo.MAD_std    = vy_zarray_velo.MAD_std    * abs(yres) / datedelta.days
+		vy_zarray_velo.MAD_mean   = vy_zarray_velo.MAD_mean   * abs(yres) / datedelta.days
+
+		with open(ini.velocorrection['label_logfile'], 'w') as f:
 			f.write( 'Total points over bedrock =   {:6n}\n'.format(len(vx_zarray)) )
-			f.write( 'MAD_median_x       = {:6.3f}\n'.format(float(vx_zarray.MAD_median)) )
-			f.write( 'MAD_median_y       = {:6.3f}\n'.format(float(vy_zarray.MAD_median)) )
-			f.write( 'MAD_std_x          = {:6.3f}\n'.format(float(vx_zarray.MAD_std)) )
-			f.write( 'MAD_std_y          = {:6.3f}\n'.format(float(vy_zarray.MAD_std)) )
-			f.write( 'MAD_mean_x         = {:6.3f}\n'.format(float(vx_zarray.MAD_mean)) )
-			f.write( 'MAD_mean_y         = {:6.3f}\n'.format(float(vy_zarray.MAD_mean)) )
+			f.write( '-------- Unit: Pixels --------\n')
+			f.write( 'MAD_median_x_px    = {:6.3f}\n'.format(float(vx_zarray.MAD_median)) )
+			f.write( 'MAD_median_y_px    = {:6.3f}\n'.format(float(vy_zarray.MAD_median)) )
+			f.write( 'MAD_std_x_px       = {:6.3f}\n'.format(float(vx_zarray.MAD_std)) )
+			f.write( 'MAD_std_y_px       = {:6.3f}\n'.format(float(vy_zarray.MAD_std)) )
+			f.write( 'MAD_mean_x_px      = {:6.3f}\n'.format(float(vx_zarray.MAD_mean)) )
+			f.write( 'MAD_mean_y_px      = {:6.3f}\n'.format(float(vy_zarray.MAD_mean)) )
+			f.write( '-------- Unit: Velocity (L/T; most likely m/day) --------\n')
+			f.write( 'MAD_median_x       = {:6.3f}\n'.format(float(vx_zarray_velo.MAD_median)) )
+			f.write( 'MAD_median_y       = {:6.3f}\n'.format(float(vy_zarray_velo.MAD_median)) )
+			f.write( 'MAD_std_x          = {:6.3f}\n'.format(float(vx_zarray_velo.MAD_std)) )
+			f.write( 'MAD_std_y          = {:6.3f}\n'.format(float(vy_zarray_velo.MAD_std)) )
+			f.write( 'MAD_mean_x         = {:6.3f}\n'.format(float(vx_zarray_velo.MAD_mean)) )
+			f.write( 'MAD_mean_y         = {:6.3f}\n'.format(float(vy_zarray_velo.MAD_mean)) )
 
 		if pngname is not None:
 			import matplotlib.pyplot as plt
@@ -521,10 +547,12 @@ class RasterVelos():
 
 			# plt.xlabel('CryoSat dH/dt (m/yr)')
 			# plt.ylabel('WorldView dH/dt (m/yr)')
-			plt.ylabel('Vy (m/d)')
-			plt.xlabel('Vx (m/d)')
+			plt.ylabel('Offset-X (pixels)')
+			plt.xlabel('Offset-Y (pixels)')
 			plt.savefig(pngname, format='png', dpi=200)
 			plt.cla()
+
+		return vx_zarray_velo, vy_zarray_velo
 
 	def VeloCorrection(self, vx_zarray, vy_zarray, output_raster_prefix):
 

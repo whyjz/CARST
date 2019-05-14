@@ -80,6 +80,14 @@ if args.step == 'correctvelo' or args.step is None:
 	ampoff.Ampcoroff2Velo(velo_or_pixel='pixel')
 
 	shp = ini.velocorrection['bedrock']
+	prefix = ini.rawoutput['label_geotiff']
+	velo = RasterVelos(vx=SingleRaster(prefix + '_vx.tif'),
+		               vy=SingleRaster(prefix + '_vy.tif'),
+		               snr=SingleRaster(prefix + '_snr.tif'),
+		               mag=SingleRaster(prefix + '_mag.tif'),
+		               errx=SingleRaster(prefix + '_errx.tif'),
+		               erry=SingleRaster(prefix + '_erry.tif'))
+
 	idx = points_in_polygon(ampoff.data[:, [0,2]], shp)
 
 	# SNR constraint
@@ -92,8 +100,8 @@ if args.step == 'correctvelo' or args.step is None:
 	vyraw_bdval = ZArray(ampoff.velo_y[idx, 2])
 	vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vy.png', ini=ini)
 
-	velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini.velocorrection['label_logfile'], pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx-vs-vy.png' )
-	velo.VeloCorrection(vxraw_bdval, vyraw_bdval, ini.velocorrection['label_geotiff'])
+	vxraw_bdval_velo, vyraw_bdval_velo = velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini, pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx-vs-vy.png' )
+	velo.VeloCorrection(vxraw_bdval_velo, vyraw_bdval_velo, ini.velocorrection['label_geotiff'])
 
 
 	#=================== Old method ===================

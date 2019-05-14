@@ -51,7 +51,8 @@ class ZArray(np.ndarray):
 	# Major Rehaul on Oct 25, 2018, added the background correction 
 	# the default of mad_multiplier was 3.0
 	# background correction redesigned on Nov 9, 2018 using more information from the PX
-	def StatisticOutput(self, plot=True, mad_multiplier=5.0, pngname=None, ini=None):
+
+	def StatisticOutput(self, plot=True, pngname=None, ini=None):
 		mad = lambda x : 1.482 * np.median(abs(x - np.median(x)))
 		if self.size == 0:
 			print('WARNING: there is no Z records.')
@@ -61,15 +62,15 @@ class ZArray(np.ndarray):
 			# 	ref_raster = SingleRaster(ini.imagepair['image1'])
 			# 	-> to be continued
 
+			mad_multiplier = ini.noiseremoval['peak_detection']
 
 			uniq, uniq_n = np.unique(self, return_counts=True)
-			# ---- Verification of the sub-pixel sampling rate
-			# def_sampling_rate = ini.pxsettings['oversampling'] * 10   # sampling rate defined in the ini file
-			# real_sampling_rate = 
-
-			# ----
-			uniq_n_est, _, _ = backcor(uniq, uniq_n)
+			uniq, uniq_n = fill_with_zero(uniq, uniq_n, ini.pxsettings['oversampling'])
+			uniq_n_est, _, _ = backcor(uniq, uniq_n, order=ini.noiseremoval['backcor_order'])
 			background_mad = mad(uniq_n - uniq_n_est)    # this is actually the noise level
+			if background_mad == 0:
+				background_mad = np.median(abs(uniq_n - uniq_n_est))
+				print("Use the median of abs(uniq_n - uniq_n_est) as one SNR level since mad = 0")
 			background_threshold = uniq_n_est + mad_multiplier * background_mad
 			signal_idx = np.argwhere(uniq_n >= background_threshold)
 			signal_idx = np.ndarray.flatten(signal_idx)
@@ -77,25 +78,48 @@ class ZArray(np.ndarray):
 			# self.signal_val = uniq[signal_idx]
 			signal_n = uniq_n[signal_idx]
 			# self.signal_n = uniq_n[signal_idx]
-			self.signal_array = np.repeat(signal_val, signal_n)
+			self.signal_array = np.repeat(signal_val, signal_n.astype(int))
+			
 
-			offset_median = np.median(self.signal_array)
-			offset_mad = mad(self.signal_array)
-			if offset_mad == 0:
-				# the case when over half of the numbers are at the median number,
-				# we use the Median absolute deviation around the mean instead of around the median.
-				offset_mad = 1.482 * np.median(abs(self.signal_array - np.mean(self.signal_array)))
-			lbound = offset_median - mad_multiplier * offset_mad
-			ubound = offset_median + mad_multiplier * offset_mad
-			self.MAD_idx = np.logical_and(self.signal_array > lbound, self.signal_array < ubound)
-			trimmed_numlist = self.signal_array[self.MAD_idx]
-			self.MAD_mean = trimmed_numlist.mean()
-			self.MAD_median = np.median(trimmed_numlist)
-			self.MAD_std = trimmed_numlist.std(ddof=1)
+
+			self.MAD_mean = self.signal_array.mean()
+			self.MAD_median = np.median(self.signal_array)
+			self.MAD_std = self.signal_array.std(ddof=1)
+
+			# offset_median = np.median(self.signal_array)
+			# offset_mad = mad(self.signal_array)
+			# if offset_mad == 0:
+			# 	# the case when over half of the numbers are at the median number,
+			# 	# we use the Median absolute deviation around the mean instead of around the median.
+			# 	offset_mad = 1.482 * np.median(abs(self.signal_array - np.mean(self.signal_array)))
+			# lbound = offset_median - mad_multiplier * offset_mad
+			# ubound = offset_median + mad_multiplier * offset_mad
+			# self.MAD_idx = np.logical_and(self.signal_array > lbound, self.signal_array < ubound)
+			# trimmed_numlist = self.signal_array[self.MAD_idx]
+			# self.MAD_mean = trimmed_numlist.mean()
+			# self.MAD_median = np.median(trimmed_numlist)
+			# self.MAD_std = trimmed_numlist.std(ddof=1)
 			if plot == True and pngname is not None:
+				self.VerifyBackcor(pngname, uniq, uniq_n, uniq_n_est, background_threshold)
 				self.HistWithOutliers(pngname)
 				pickle.dump(self, open(pngname.replace('.png', '.p'), 'wb'))
 			# return idx2, trimmed_numlist.mean(), np.median(trimmed_numlist), trimmed_numlist.std(ddof=1)
+
+	def VerifyBackcor(self, pngname, uniq, uniq_n, uniq_n_est, background_threshold):
+
+		import matplotlib.pyplot as plt
+
+		pngname = pngname.replace('.png', '-backcor.png')
+		plt.plot(uniq, uniq_n, label='Histogram', color='xkcd:plum')
+		plt.plot(uniq, uniq_n_est, label='Background', color='xkcd:lightgreen')
+		plt.plot(uniq, background_threshold, label='Detection Threshold', color='xkcd:coral')
+		# plt.xlim([min(uniq), max(uniq)])
+		plt.ylabel('N')
+		plt.xlabel('offset (pixels)')
+		plt.legend(loc='best')
+		plt.savefig(pngname, format='png', dpi=200)
+		plt.cla()
+
 
 	def HistWithOutliers(self, pngname, histogram_bound=10):
 
@@ -109,7 +133,8 @@ class ZArray(np.ndarray):
 			lbound = min(self)
 			rbound = max(self)
 		bins = np.linspace(lbound, rbound, nbins)
-		trimmed_numlist = self.signal_array[self.MAD_idx]
+		# trimmed_numlist = self.signal_array[self.MAD_idx]
+		trimmed_numlist = self.signal_array
 		N_outside_lbound_red = int(sum(self < lbound))
 		N_outside_rbound_red = int(sum(self > rbound))
 		N_outside_lbound_blue = int(sum(trimmed_numlist < lbound))
@@ -119,7 +144,7 @@ class ZArray(np.ndarray):
 		plt.hist(self, bins=bins, color=[0.95, 0.25, 0.1])
 		plt.hist(trimmed_numlist, bins=bins, color=[0.1, 0.25, 0.95])
 		plt.ylabel('N')
-		plt.xlabel('offset (pixel value unit)')
+		plt.xlabel('offset (pixels)')
 		plt.title(title_str)
 		plt.savefig(pngname, format='png', dpi=200)
 		plt.cla()
@@ -450,9 +475,12 @@ def points_in_polygon(points_geometry, shp_filename):
 
 	# return: np mask array showing where the targeted points are.
 
+	import logging
+	logging.basicConfig(level=logging.WARNING)
 	import geopandas as gpd
 	from shapely.geometry import Point
 	# from shapely.geometry import mapping
+
 
 	shapefile = gpd.read_file(shp_filename)
 	poly_geometries = [shapefile.ix[i]['geometry'] for i in range(len(shapefile))]
@@ -468,6 +496,27 @@ def points_in_polygon(points_geometry, shp_filename):
 			idx = np.logical_or(idx, tmp)
 
 	return idx
+
+
+def fill_with_zero(uniq, uniq_n, ini_oversampling):
+	"""
+	Fill the gaps between min and max with zero (counts)
+	for the uniq and uniq_n.
+	"""
+	# ---- Verification of the sub-pixel sampling rate
+	def_sampling_rate = ini_oversampling * 2   # sampling rate defined in the ini file
+	real_sampling_rate = 1 / min(np.diff(uniq))
+	if int(def_sampling_rate) != int(real_sampling_rate):
+		raise ValueError('Over-sampling rate of the data mismatches the one defined in the ini file!')
+	# ----
+
+	complete_uniq = np.arange(min(uniq), max(uniq) + min(np.diff(uniq)), min(np.diff(uniq)))
+	complete_uniq_n = np.zeros_like(complete_uniq)
+
+	idx = np.where(np.isin(complete_uniq, uniq))
+	complete_uniq_n[idx] = uniq_n
+
+	return ZArray(complete_uniq), ZArray(complete_uniq_n)
 
 
 def backcor(n, y, order=4, s=0.01, fct='sh'):
