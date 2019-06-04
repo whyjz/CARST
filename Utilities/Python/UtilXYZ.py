@@ -127,8 +127,10 @@ class ZArray(np.ndarray):
 
 		nbins = len(self) // 4 + 1
 		nbins = 201 if nbins > 201 else nbins
-		lbound = min(self) if min(self) >= -histogram_bound else -histogram_bound
-		rbound = max(self) if max(self) <= histogram_bound else histogram_bound
+
+		lbound = min(self) if (min(self) >= -histogram_bound) or (np.mean(self) < -histogram_bound) else -histogram_bound
+		rbound = max(self) if (max(self) <= histogram_bound)  or (np.mean(self) > histogram_bound)  else histogram_bound
+
 		if lbound >= rbound:
 			lbound = min(self)
 			rbound = max(self)
@@ -346,7 +348,7 @@ class AmpcoroffFile:
 			self.data[:, 5] = np.sqrt(self.data[:, 5]) / datedelta.days
 			self.data[:, 6] = np.sqrt(self.data[:, 6]) / datedelta.days
 			self.velo_x = self.data[:,[0,2,1]]
-			self.velo_y = self.data[:,[0,2,3]]
+			self.velo_y = -self.data[:,[0,2,3]]   # UL-LR system to Cartesian
 			self.snr    = self.data[:,[0,2,4]]
 			self.err_x  = self.data[:,[0,2,5]]
 			self.err_y  = self.data[:,[0,2,6]]
@@ -354,7 +356,7 @@ class AmpcoroffFile:
 			self.data[:, 0] = ulx + (self.data[:, 0] - 1) * xres
 			self.data[:, 2] = uly + (self.data[:, 2] - 1) * yres
 			self.velo_x = self.data[:,[0,2,1]]
-			self.velo_y = self.data[:,[0,2,3]]
+			self.velo_y = -self.data[:,[0,2,3]]   # UL-LR system to Cartesian
 			self.snr    = self.data[:,[0,2,4]]
 			self.err_x  = self.data[:,[0,2,5]]
 			self.err_y  = self.data[:,[0,2,6]]
