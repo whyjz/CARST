@@ -12,6 +12,7 @@ try:
 except:
 	import configparser as ConfigParser    # python 3
 from UtilRaster import SingleRaster
+from datetime import datetime
 
 class CsvTable:
 
@@ -142,7 +143,69 @@ class ConfParams:
 			if 'gnu_parallel' in self.parallel:
 				s = self.parallel['gnu_parallel'].lower()
 				self.parallel['gnu_parallel'] = s in ['true', 't', 'yes', 'y', '1']
-
+		if hasattr(self, 'pxsettings'):
+			for key in self.pxsettings:
+				if not self.pxsettings[key]:
+					# empty string
+					self.pxsettings[key] = None
+				else:
+					self.pxsettings[key] = int(self.pxsettings[key])
+			if 'size_across' not in self.pxsettings:
+				self.pxsettings['size_across'] = None
+			if 'size_down' not in self.pxsettings:
+				self.pxsettings['size_down'] = None
+			if 'gaussian_hp' in self.pxsettings:
+				self.pxsettings['gaussian_hp'] = bool(int(self.pxsettings['gaussian_hp']))
+			else:
+				self.pxsettings['gaussian_hp'] = False
+		if hasattr(self, 'outputcontrol'):
+			if 'datepair_prefix' in self.outputcontrol:
+				self.outputcontrol['datepair_prefix'] = bool(int(self.outputcontrol['datepair_prefix']))
+				atime = datetime.strptime(self.imagepair['image1_date'], '%Y-%m-%d')
+				btime = datetime.strptime(self.imagepair['image2_date'], '%Y-%m-%d')
+				self.outputcontrol['label_datepair'] = atime.strftime('%Y%m%d') + '-' + btime.strftime('%Y%m%d' + '_')
+			else:
+				self.outputcontrol['if_generate_xyztext'] = False
+			if 'output_folder' not in self.outputcontrol:
+				self.outputcontrol['output_folder'] = '.'
+		if hasattr(self, 'rawoutput'):
+			if 'if_generate_xyztext' in self.rawoutput:
+				self.rawoutput['if_generate_xyztext'] = bool(int(self.rawoutput['if_generate_xyztext']))
+			else:
+				self.rawoutput['if_generate_xyztext'] = False
+			if 'if_generate_ampofftxt' in self.rawoutput:
+				self.rawoutput['if_generate_ampofftxt'] = bool(int(self.rawoutput['if_generate_ampofftxt']))
+			else:
+				self.rawoutput['if_generate_ampofftxt'] = False
+			if 'label_ampcor' in self.rawoutput:
+				if self.outputcontrol['datepair_prefix']:
+					self.rawoutput['label_ampcor'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.rawoutput['label_ampcor'])
+				else:
+					self.rawoutput['label_ampcor'] = os.path.join(self.outputcontrol['output_folder'], self.rawoutput['label_ampcor'])
+			if 'label_geotiff' in self.rawoutput:
+				if self.outputcontrol['datepair_prefix']:
+					self.rawoutput['label_geotiff'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.rawoutput['label_geotiff'])
+				else:
+					self.rawoutput['label_geotiff'] = os.path.join(self.outputcontrol['output_folder'], self.rawoutput['label_geotiff'])
+		if hasattr(self, 'velocorrection'):
+			if 'label_bedrock_histogram' in self.velocorrection:
+				if self.outputcontrol['datepair_prefix']:
+					self.velocorrection['label_bedrock_histogram'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.velocorrection['label_bedrock_histogram'])
+				else:
+					self.velocorrection['label_bedrock_histogram'] = os.path.join(self.outputcontrol['output_folder'], self.velocorrection['label_bedrock_histogram'])
+			if 'label_geotiff' in self.velocorrection:
+				if self.outputcontrol['datepair_prefix']:
+					self.velocorrection['label_geotiff'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.velocorrection['label_geotiff'])
+				else:
+					self.velocorrection['label_geotiff'] = os.path.join(self.outputcontrol['output_folder'], self.velocorrection['label_geotiff'])
+			if 'label_logfile' in self.velocorrection:
+				if self.outputcontrol['datepair_prefix']:
+					self.velocorrection['label_logfile'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.velocorrection['label_logfile'])
+				else:
+					self.velocorrection['label_logfile'] = os.path.join(self.outputcontrol['output_folder'], self.velocorrection['label_logfile'])
+		if hasattr(self, 'noiseremoval'):
+			for key in self.noiseremoval:
+				self.noiseremoval[key] = float(self.noiseremoval[key])
 
 
 	"""
