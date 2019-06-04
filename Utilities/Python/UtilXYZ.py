@@ -9,7 +9,132 @@
 import numpy as np
 from UtilRaster import SingleRaster
 from scipy.interpolate import griddata
+from scipy.stats import gaussian_kde
 import pickle
+import matplotlib.pyplot as plt
+
+class DuoZArray:
+
+	def __init__(self, z1=None, z2=None, ini=None):
+
+
+
+		self.z1 = z1
+		self.z2 = z2
+		self.ini = ini
+		self.signal_idx = None
+
+	def OutlierDetection2D(self, thres_sigma=3.0, plot=True):
+		x = self.z1
+		y = self.z2
+		xy = np.vstack([x, y])
+		z = gaussian_kde(xy)(xy)
+
+		thres_multiplier = np.e ** (thres_sigma ** 2 / 2)   # normal dist., +- sigma number 
+		thres = max(z) / thres_multiplier
+		idx = z >= thres
+		self.signal_idx = idx
+
+		if plot:
+			pt_style = {'s': 5, 'edgecolor': ''}
+			ax_center = [x[idx].mean(), y[idx].mean()]
+			ax_halfwidth = max([max(x) - x[idx].mean(), 
+				                x[idx].mean() - min(x),
+				                max(y) - y[idx].mean(),
+				                y[idx].mean() - min(y)]) + 1
+			plt.subplot(121)
+			plt.scatter(x, y, c=z, **pt_style)
+			plt.scatter(x[~idx], y[~idx], c='xkcd:red', **pt_style)
+			plt.axis('scaled')
+			plt.xlim([ax_center[0] - ax_halfwidth, ax_center[0] + ax_halfwidth])
+			plt.ylim([ax_center[1] - ax_halfwidth, ax_center[1] + ax_halfwidth])
+			plt.ylabel('Offset-X (pixels)')
+			plt.xlabel('Offset-Y (pixels)')
+			plt.subplot(122)
+			plt.scatter(x, y, c=z, **pt_style)
+			plt.scatter(x[~idx], y[~idx], c='xkcd:red', **pt_style)
+			plt.axis('scaled')
+			plt.xlim([min(x[idx]) - 1, max(x[idx]) + 1])
+			plt.ylim([min(y[idx]) - 1, max(y[idx]) + 1])
+			plt.savefig(self.ini.velocorrection['label_bedrock_histogram'] + '_vx-vs-vy.png', format='png', dpi=200)
+			plt.clf()
+
+	def HistWithOutliers(self, which=None):
+		if which == 'x':
+			x = self.z1
+			pnglabel = '_vx.png'
+		elif which == 'y':
+			x = self.z2
+			pnglabel = '_vy.png'
+		else:
+			raise ValueError('Please indicate "x" or "y" for your histogram.')
+
+		r_uniq, r_uniq_n = np.unique(x, return_counts=True)
+		b_uniq, b_uniq_n = np.unique(x[self.signal_idx], return_counts=True)
+
+		bar_w = min(np.diff(r_uniq))
+		lbound = min(x[self.signal_idx]) - np.std(x)
+		rbound = max(x[self.signal_idx]) + np.std(x)
+		N_outside_lbound_red = int(sum(x < lbound))
+		N_outside_rbound_red = int(sum(x > rbound))
+
+		plt.bar(r_uniq, r_uniq_n, width=bar_w, color='xkcd:red')
+		plt.bar(b_uniq, b_uniq_n, width=bar_w, color='xkcd:blue')
+		plt.xlim([lbound, rbound])
+		title_str = 'Red points outside (L|R): {}|{}'.format(N_outside_lbound_red, N_outside_rbound_red)
+		plt.title(title_str)
+		plt.ylabel('N')
+		plt.xlabel('offset (pixels)')
+		plt.savefig(self.ini.velocorrection['label_bedrock_histogram'] + pnglabel, format='png', dpi=200)
+		plt.clf()	
+
+	def VeloCorrectionInfo(self):
+
+		a = SingleRaster(self.ini.imagepair['image1'], date=self.ini.imagepair['image1_date'])
+		b = SingleRaster(self.ini.imagepair['image2'], date=self.ini.imagepair['image2_date'])
+		datedelta = b.date - a.date
+		geot = a.GetGeoTransform()
+		xres = geot[1]
+		yres = geot[5]
+
+		x_culled = self.z1[self.signal_idx]
+		y_culled = self.z2[self.signal_idx]
+
+		self.z1.MAD_median = np.median(x_culled)
+		self.z1.MAD_std    =    np.std(x_culled, ddof=1)
+		self.z1.MAD_mean   =   np.mean(x_culled)
+		self.z2.MAD_median = np.median(y_culled)
+		self.z2.MAD_std    =    np.std(y_culled, ddof=1)
+		self.z2.MAD_mean   =   np.mean(y_culled)
+
+		vx_zarray_velo            = self.z1[:]         * abs(xres) / datedelta.days
+		vx_zarray_velo.MAD_median = self.z1.MAD_median * abs(xres) / datedelta.days
+		vx_zarray_velo.MAD_std    = self.z1.MAD_std    * abs(xres) / datedelta.days
+		vx_zarray_velo.MAD_mean   = self.z1.MAD_mean   * abs(xres) / datedelta.days
+		vy_zarray_velo            = self.z2[:]         * abs(yres) / datedelta.days
+		vy_zarray_velo.MAD_median = self.z2.MAD_median * abs(yres) / datedelta.days
+		vy_zarray_velo.MAD_std    = self.z2.MAD_std    * abs(yres) / datedelta.days
+		vy_zarray_velo.MAD_mean   = self.z2.MAD_mean   * abs(yres) / datedelta.days
+
+		with open(self.ini.velocorrection['label_logfile'], 'w') as f:
+			f.write( 'Total points over bedrock =   {:6n}\n'.format(self.z1.size) )
+			f.write( '-------- Unit: Pixels --------\n')
+			f.write( 'median_x_px    = {:6.3f}\n'.format(float(self.z1.MAD_median)) )
+			f.write( 'median_y_px    = {:6.3f}\n'.format(float(self.z2.MAD_median)) )
+			f.write( 'std_x_px       = {:6.3f}\n'.format(float(self.z1.MAD_std)) )
+			f.write( 'std_y_px       = {:6.3f}\n'.format(float(self.z2.MAD_std)) )
+			f.write( 'mean_x_px      = {:6.3f}\n'.format(float(self.z1.MAD_mean)) )
+			f.write( 'mean_y_px      = {:6.3f}\n'.format(float(self.z2.MAD_mean)) )
+			f.write( '-------- Unit: Velocity (L/T; most likely m/day) --------\n')
+			f.write( 'median_x       = {:6.3f}\n'.format(float(vx_zarray_velo.MAD_median)) )
+			f.write( 'median_y       = {:6.3f}\n'.format(float(vy_zarray_velo.MAD_median)) )
+			f.write( 'std_x          = {:6.3f}\n'.format(float(vx_zarray_velo.MAD_std)) )
+			f.write( 'std_y          = {:6.3f}\n'.format(float(vy_zarray_velo.MAD_std)) )
+			f.write( 'mean_x         = {:6.3f}\n'.format(float(vx_zarray_velo.MAD_mean)) )
+			f.write( 'mean_y         = {:6.3f}\n'.format(float(vy_zarray_velo.MAD_mean)) )
+
+		return vx_zarray_velo, vy_zarray_velo
+
 
 class ZArray(np.ndarray):
 
@@ -348,7 +473,8 @@ class AmpcoroffFile:
 			self.data[:, 5] = np.sqrt(self.data[:, 5]) / datedelta.days
 			self.data[:, 6] = np.sqrt(self.data[:, 6]) / datedelta.days
 			self.velo_x = self.data[:,[0,2,1]]
-			self.velo_y = -self.data[:,[0,2,3]]   # UL-LR system to Cartesian
+			self.velo_y = self.data[:,[0,2,3]]
+			self.velo_y[:, -1] = -self.velo_y[:, -1]  # UL-LR system to Cartesian
 			self.snr    = self.data[:,[0,2,4]]
 			self.err_x  = self.data[:,[0,2,5]]
 			self.err_y  = self.data[:,[0,2,6]]
@@ -356,7 +482,8 @@ class AmpcoroffFile:
 			self.data[:, 0] = ulx + (self.data[:, 0] - 1) * xres
 			self.data[:, 2] = uly + (self.data[:, 2] - 1) * yres
 			self.velo_x = self.data[:,[0,2,1]]
-			self.velo_y = -self.data[:,[0,2,3]]   # UL-LR system to Cartesian
+			self.velo_y = self.data[:,[0,2,3]]   
+			self.velo_y[:, -1] = -self.velo_y[:, -1]  # UL-LR system to Cartesian
 			self.snr    = self.data[:,[0,2,4]]
 			self.err_x  = self.data[:,[0,2,5]]
 			self.err_y  = self.data[:,[0,2,6]]

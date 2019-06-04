@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilitie
 from UtilRaster import SingleRaster, RasterVelos
 from UtilConfig import ConfParams
 from UtilPX import ampcor_task, writeout_ampcor_task
-from UtilXYZ import ZArray, AmpcoroffFile, points_in_polygon
+from UtilXYZ import ZArray, DuoZArray, AmpcoroffFile, points_in_polygon
 # from UtilFit import DemPile
 import numpy as np
 
@@ -96,15 +96,21 @@ if args.step == 'correctvelo' or args.step is None:
 
 
 	vxraw_bdval = ZArray(ampoff.velo_x[idx, 2])
-	vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx.png', ini=ini)
 	vyraw_bdval = ZArray(ampoff.velo_y[idx, 2])
-	vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vy.png', ini=ini)
-
-	vxraw_bdval_velo, vyraw_bdval_velo = velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini, pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx-vs-vy.png' )
+	vxyraw_bdval = DuoZArray(z1=vxraw_bdval, z2=vyraw_bdval, ini=ini)
+	vxyraw_bdval.OutlierDetection2D()
+	vxyraw_bdval.HistWithOutliers(which='x')
+	vxyraw_bdval.HistWithOutliers(which='y')
+	vxraw_bdval_velo, vyraw_bdval_velo = vxyraw_bdval.VeloCorrectionInfo()
 	velo.VeloCorrection(vxraw_bdval_velo, vyraw_bdval_velo, ini.velocorrection['label_geotiff'])
 
+	#=================== Older method ===================
 
-	#=================== Old method ===================
+	# vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx.png', ini=ini)
+	# vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vy.png', ini=ini)
+	# vxraw_bdval_velo, vyraw_bdval_velo = velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini, pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx-vs-vy.png' )
+
+	#=================== Oldest method ===================
 
 
 	# shp = ini.velocorrection['bedrock']
