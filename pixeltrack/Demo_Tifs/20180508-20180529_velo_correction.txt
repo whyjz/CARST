@@ -1,7 +1,0 @@
-Total points over bedrock =      389
-MAD_median_x       =  1.363
-MAD_median_y       =  1.830
-MAD_std_x          =  0.685
-MAD_std_y          =  0.690
-MAD_mean_x         =  1.091
-MAD_mean_y         =  1.624
