@@ -1,2 +1,0 @@
-20/ user@node1.some.address
-8/ user@node2.some.address

@@ -14,7 +14,7 @@ Required Platform and Software
 
 dh/dt **[v1.0]**:
 
-- python, with the following modules installed 
+- python >= 3.0, with the following modules installed 
     - numpy 
     - scipy
     - matplotlib
@@ -26,10 +26,12 @@ dh/dt **[v1.0]**:
 pixel tracking **[v1.0]**:
 
 - ISCE >= 2.0.0 (built with your python)
-- python, with the following modules installed
+- python >= 3.0, with the following modules installed
     - numpy 
     - scipy
     - gdal
+    - geopandas
+    - shapely
 
 Folder Structure
 ----------------
@@ -42,12 +44,12 @@ Folder Structure
 - pixeltrack: Main programs for pixel tracking **[v1.0]**
     - pixeltrack.py: main program
     - defaults.ini: template configuration file
-    - Demo_Tifs: Demo input files
+    - Demo_Data: Demo input files
 
 Detailed Description
 --------------------
-- Doc/dhdt/README.rst: **[v1.0]** dh/dt documentation
-- Doc/pixeltrack/README.rst: **[v1.0]** pixel tracking documentation
+- dhdt/README.rst: **[v1.0]** dh/dt documentation
+- pixeltrack/README.rst: **[v1.0]** pixel tracking documentation
 
 Version History
 ---------------
@@ -60,8 +62,11 @@ Here's the reference to cite for dh/dt **[v1.0]**:
   on Franz Josef Land, Russian Arctic. Remote Sensing of Environment 211, 357–375. 
   http://doi.org/10.1016/j.rse.2018.04.004
 
-There's still no reference to cite for pixel tracking **[v1.0]**, but you can use our
-reference(s) for the old version for credits.
+Here's the reference to cite for pixel tracking **[v1.0]**: 
+
+- Willis, M. J., Zheng, W., Durkin, W. J., Pritchard, M. E., Ramage, J. M., 
+  Dowdeswell, J. A., … Porter, C. C. (2018). Massive destabilization of an Arctic ice cap. 
+  Earth and Planetary Science Letters, 502, 146–155. http://doi.org/10.1016/j.epsl.2018.08.049
 
 The dh/dt **[v0.2]** and the pixel tracking **[v0.2]** was developed by Whyjay Zheng,
 William J. Durkin, and Professor Matthew Pritchard, Cornell University.
