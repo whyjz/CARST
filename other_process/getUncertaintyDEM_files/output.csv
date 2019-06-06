@@ -1,6 +1,0 @@
-filename,date,uncertainty,mean_offset_wrt_refpts,trimmed_N,trimming_lb,trimming_up,refpts_file
-../dhdt/Demo_DEMs/HookerFJL_11AUG16WV01DEM1.tif,,0.541284967233,0.0262448667111,45,-1.36005433691,1.56933134491,getUncertaintyDEM_files/pointfile_input.xyz
-../dhdt/Demo_DEMs/HookerFJL_12JUL20WV01DEM2.tif,,0.386525718014,0.002662404225,40,-0.977289043546,1.07532112755,getUncertaintyDEM_files/pointfile_input.xyz
-../dhdt/Demo_DEMs/HookerFJL_13APR18WV01DEM1.tif,,0.470067236316,-0.0526357856136,44,-1.42405710787,1.19598964987,getUncertaintyDEM_files/pointfile_input.xyz
-../dhdt/Demo_DEMs/HookerFJL_13APR19WV01DEM3.tif,,0.367553921245,0.0460576847381,42,-1.10398515503,1.19241846503,getUncertaintyDEM_files/pointfile_input.xyz
-../dhdt/Demo_DEMs/HookerFJL_14APR02WV02DEM1.tif,,0.40128971023,0.0078212257,40,-1.20866070075,1.19537198075,getUncertaintyDEM_files/pointfile_input.xyz
