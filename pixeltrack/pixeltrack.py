@@ -98,7 +98,7 @@ if args.step == 'correctvelo' or args.step is None:
 	vxraw_bdval = ZArray(ampoff.velo_x[idx, 2])
 	vyraw_bdval = ZArray(ampoff.velo_y[idx, 2])
 	vxyraw_bdval = DuoZArray(z1=vxraw_bdval, z2=vyraw_bdval, ini=ini)
-	vxyraw_bdval.OutlierDetection2D()
+	vxyraw_bdval.OutlierDetection2D(thres_sigma=ini.noiseremoval['outlier_sigma_threshold'])
 	vxyraw_bdval.HistWithOutliers(which='x')
 	vxyraw_bdval.HistWithOutliers(which='y')
 	vxraw_bdval_velo, vyraw_bdval_velo = vxyraw_bdval.VeloCorrectionInfo()
