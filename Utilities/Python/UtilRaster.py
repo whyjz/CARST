@@ -188,9 +188,49 @@ class SingleRaster:
 			py = int((y - uly) / yres) # y pixel coor
 			dsband = ds.GetRasterBand(band)
 			pixel_val = dsband.ReadAsArray(px, py, 1, 1)   # it numpy.array with shape of (1, 1)
-			return float(pixel_val[0])
+			pixel_val = float(pixel_val)
+			# print('pixel_val: {}'.format(pixel_val))
+			# print('nodata: {}'.format(self.GetNoDataValue(band=band)))
+			# print('abs: {}'.format(abs(pixel_val - self.GetNoDataValue(band=band))))
+			if abs(pixel_val - self.GetNoDataValue(band=band)) < 1:
+				pixel_val = np.nan
+			return pixel_val
 		else:
 			return np.nan
+
+	def ReadGeolocPoints(self, x, y, band=1):
+
+		"""
+		Batch routine for running ReadGeolocPoint many times.
+		x & y: 1-D array showing the (x, y) of many points.
+		Returns NaN if (x, y) is not within the extent of the raster.
+		"""
+
+		ulx, uly, lrx, lry = self.GetExtent()
+		ulx, xres, xskew, uly, yskew, yres  = self.GetGeoTransform()
+
+		x_in = np.logical_and(ulx <= x, x < lrx)
+		y_in = np.logical_and(uly >= y, y > lry)
+		xy_in = np.logical_and(x_in, y_in)
+
+		z = np.empty_like(x)
+		z[:] = np.nan
+		idx = np.where(xy_in)
+		ds = gdal.Open(self.fpath)
+		dsband = ds.GetRasterBand(band)
+
+		for i in idx[0]:
+			# print(x[i])
+			px = int((x[i] - ulx) / xres) # x pixel coor
+			py = int((y[i] - uly) / yres) # y pixel coor
+			pixel_val = dsband.ReadAsArray(px, py, 1, 1)   # it numpy.array with shape of (1, 1)
+			pixel_val = float(pixel_val)
+			if abs(pixel_val - self.GetNoDataValue(band=band)) < 1:
+				pixel_val = np.nan
+			z[i] = pixel_val
+
+		return z
+
 
 	def ReadAsArray(self, band=1):
 
