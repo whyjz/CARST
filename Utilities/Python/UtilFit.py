@@ -8,6 +8,7 @@ import numpy as np
 from numpy.linalg import inv
 import os
 import sys
+import gdal
 from datetime import datetime
 from shapely.geometry import Polygon
 from scipy.interpolate import interp2d
@@ -27,6 +28,24 @@ def timeit(func):
         print('Time taken: ' + str(time_b - time_a))
         return dec_func
     return time_wrapper
+
+def Resample_Array2(orig_dem, resamp_ref_dem, resampleAlg='bilinear'):
+
+	"""
+	resample orig_dem using the extent and spacing provided by resamp_ref_dem
+	orig_dem: class UtilRaster.SingleRaster object
+	resamp_ref_dem: class UtilRaster.SingleRaster object
+	returns: an numpy array, which you can use the methods in UtilRaster to trasform it into a raster
+
+	This one uses gdal.Warp API.
+	"""
+
+	ds = gdal.Open(orig_dem.fpath)
+	ulx, uly, lrx, lry = resamp_ref_dem.GetExtent()
+	opts = gdal.WarpOptions(outputBounds=(ulx, lry, lrx, uly), xRes=resamp_ref_dem.GetXRes(), yRes=resamp_ref_dem.GetYRes(), resampleAlg=resampleAlg)
+	out_ds = gdal.Warp('tmp.tif', ds, options=opts)
+	return out_ds.GetRasterBand(1).ReadAsArray()
+
 
 def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 
@@ -312,7 +331,8 @@ class DemPile(object):
 			print('{}) {}'.format(i + 1, os.path.basename(self.dems[i].fpath) ))
 			if self.dems[i].uncertainty <= self.maskparam['max_uncertainty']:
 				datedelta = self.dems[i].date - self.refdate
-				znew = Resample_Array(self.dems[i], self.refgeo, resamp_method='linear')
+				# znew = Resample_Array(self.dems[i], self.refgeo, resamp_method='linear')
+				znew = Resample_Array2(self.dems[i], self.refgeo)
 				znew_mask = np.logical_and(znew > 0, self.refgeomask)
 				fill_idx = np.where(znew_mask)
 				for m,n in zip(fill_idx[0], fill_idx[1]):
@@ -365,8 +385,8 @@ class DemPile(object):
 				# if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 0):
 				if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
 					slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty)
-					if residual > 100:
-						print(date, value, uncertainty)
+					# if residual > 100:
+					# 	print(date, value, uncertainty)
 					self.fitdata['slope'][m, n] = slope
 					self.fitdata['slope_err'][m, n] = slope_err
 					self.fitdata['residual'][m, n] = residual
