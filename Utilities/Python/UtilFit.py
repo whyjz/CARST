@@ -138,22 +138,22 @@ def EVMD_idx(y, validated_value, threshold=6):
 			validated_range = [min(tmp), max(tmp)]
 	return idx
 
-def wlr_corefun(x, y, ye):
+def wlr_corefun(x, y, ye, evmd_threshold=6, detailed=False):
 	# wlr = weighted linear regression.
-	exitstate, validated_value = EVMD(y, threshold=6)
+	exitstate, validated_value = EVMD(y, threshold=evmd_threshold)
 	if exitstate >= 0 or (max(x) - min(x)) < 1:
 		slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
 		return slope, slope_err, resid, count
 	else:
 		# if x.size == 3:
 		# print(x, y, ye)
-		idx = EVMD_idx(y, validated_value, threshold=6)
+		idx = EVMD_idx(y, validated_value, threshold=evmd_threshold)
 		if sum(idx) >= 3:
 			x = x[idx]
 			y = y[idx]
 			ye = ye[idx]
 			w     = [1 / k for k in ye]
-			G     = np.vstack([x, np.ones(x.size)]).T
+			G     = np.vstack([x, np.ones(x.size)]).T   # defines the model (y = a + bx)
 			W     = np.diag(w)
 			Gw    = W @ G
 			yw    = W @ y.T                          # assuming y is a 1-by-N array
@@ -172,7 +172,10 @@ def wlr_corefun(x, y, ye):
 			count = x.size
 			# if resid > 100000:
 			# 	print(x,y,ye,cookd,goodpoint)
-			return slope, slope_err, resid, count
+			if detailed:
+				return slope, slope_err, resid, count, x, y, y_est
+			else:
+				return slope, slope_err, resid, count
 		else:
 			slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
 			return slope, slope_err, resid, count
@@ -273,6 +276,7 @@ class DemPile(object):
 			self.refgeomask = refgeo.ReadAsArray().astype(bool)
 		self.fitdata = {'slope': [], 'slope_err': [], 'residual': [], 'count': []}
 		self.maskparam = {'max_uncertainty': 9999, 'min_time_span': 0}
+		self.evmd_threshold = 6
 
 	def AddDEM(self, dems):
 		# ==== Add DEM object list ====
@@ -308,6 +312,10 @@ class DemPile(object):
 		if 'min_time_span' in ini.settings:
 			self.maskparam['min_time_span'] = float(ini.settings['min_time_span'])
 
+	def SetEVMDThreshold(self, ini):
+		if 'evmd_threshold' in ini.regression:
+			self.evmd_threshold = float(ini.regression['evmd_threshold'])
+
 	def InitTS(self):
 		# ==== Prepare the reference geometry ====
 		refgeo_Ysize = self.refgeo.GetRasterYSize()
@@ -323,6 +331,7 @@ class DemPile(object):
 		self.SetRefGeo(ini.refgeometry['gtiff'])
 		self.SetRefDate(ini.settings['refdate'])
 		self.SetMaskParam(ini)
+		self.SetEVMDThreshold(ini)
 
 	@timeit
 	def PileUp(self):
@@ -384,7 +393,7 @@ class DemPile(object):
 				# Whyjay: May 10, 2018: cancelled the min date span (date[-1] - date[0] > 0), previously > 200
 				# if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 0):
 				if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
-					slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty)
+					slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty, self.evmd_threshold)
 					# if residual > 100:
 					# 	print(date, value, uncertainty)
 					self.fitdata['slope'][m, n] = slope
@@ -407,6 +416,12 @@ class DemPile(object):
 		dhdt_error.Array2Raster(self.fitdata['slope_err'], self.refgeo)
 		dhdt_res.Array2Raster(self.fitdata['residual'], self.refgeo)
 		dhdt_count.Array2Raster(self.fitdata['count'], self.refgeo)
+
+	def ShowDhdtTifs(self):
+		dhdt_dem = SingleRaster(self.dhdtprefix + '_dhdt.tif')
+		dhdt_error = SingleRaster(self.dhdtprefix + '_dhdt_error.tif')
+		dhdt_res = SingleRaster(self.dhdtprefix + '_dhdt_residual.tif')
+		dhdt_count = SingleRaster(self.dhdtprefix + '_dhdt_count.tif')
 
 
 
