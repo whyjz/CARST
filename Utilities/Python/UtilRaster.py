@@ -374,7 +374,8 @@ class SingleRaster:
 		# PROBABLY HAVE TO CHANGE TO out_image[0] HERE
 		# extract the valid values
 		# and return them as a numpy 1-D array
-		return np.extract(clipped_data != nodata, clipped_data)
+		# return np.extract(clipped_data != nodata, clipped_data)
+		return clipped_data
 
 	def GaussianHighPass(self, sigma=3, truncate=1.0):
 
