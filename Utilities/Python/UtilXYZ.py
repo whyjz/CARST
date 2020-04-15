@@ -612,7 +612,7 @@ def points_in_polygon(points_geometry, shp_filename):
 
 
 	shapefile = gpd.read_file(shp_filename)
-	poly_geometries = [shapefile.ix[i]['geometry'] for i in range(len(shapefile))]
+	poly_geometries = [shapefile.loc[i]['geometry'] for i in range(len(shapefile))]
 	pt_geometries = [Point(xy) for xy in zip(points_geometry[:, 0], points_geometry[:, 1])]
 	pt_gs = gpd.GeoSeries(pt_geometries)
 
