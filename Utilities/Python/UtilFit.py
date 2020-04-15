@@ -17,6 +17,7 @@ from scipy.interpolate import griddata
 import gc
 from UtilRaster import SingleRaster
 import pickle
+import matplotlib.pyplot as plt
 
 def timeit(func):
     def time_wrapper(*args, **kwargs):
@@ -178,7 +179,10 @@ def wlr_corefun(x, y, ye, evmd_threshold=6, detailed=False):
 				return slope, slope_err, resid, count
 		else:
 			slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
-			return slope, slope_err, resid, count
+			if detailed:
+				return slope, slope_err, resid, count, x, y, y
+			else:
+				return slope, slope_err, resid, count
 
 
 		# ============ Using Cook's Distance ============
@@ -250,7 +254,41 @@ def wlr_corefun(x, y, ye, evmd_threshold=6, detailed=False):
 	# 	residual = np.sum((np.polyval(p, x[:-2]) - y[:-2]) ** 2)
 	# return slope, slope_err, residual
 
-
+def onclick_wrapper(data, fig, ax):
+	def onclick(event):
+	    print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+	          ('double' if event.dblclick else 'single', event.button,
+	           event.x, event.y, event.xdata, event.ydata))
+	    col = int(event.xdata)
+	    row = int(event.ydata)
+	    xx = np.array(data[row][col]['date'])
+	    yy = np.array(data[row][col]['value'])
+	    ye = np.array(data[row][col]['uncertainty'])
+	    slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=80, detailed=True)
+	    SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
+	    SSRes = np.sum((y_good - y_goodest) ** 2)
+	    SST = np.sum((y_good - np.mean(y_good)) ** 2)
+	    Rsquared = 1 - SSRes / SST
+	    ax.plot(event.xdata, event.ydata, '.', markersize=10, markeredgewidth=1, markeredgecolor='k', color='xkcd:green')
+	    fig.canvas.draw()
+	    figi = plt.figure()
+	    axi = plt.gca()
+	    axi.errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='ko')
+	    np.set_printoptions(precision=3)
+	    np.set_printoptions(suppress=True)
+	    xye = np.vstack((xx,yy,ye)).T
+	    print(xye[xye[:,1].argsort()])
+	    # print(xx)
+	    # print(yy)
+	    # print(ye)
+	    axi.plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
+	    axi.plot(x_good, y_good, '.', color='r', markersize=8, zorder=30)
+	    axi.text(0.1, 0.1, 'R^2 = {:.4f}'.format(Rsquared), transform=ax.transAxes)
+	    axi.set_xlabel('days, from 2015-01-01')
+	    axi.set_ylabel('height (m)')
+	    # plt.plot(xx, yy)
+	    figi.show()
+	return onclick
 
 
 
@@ -422,6 +460,7 @@ class DemPile(object):
 		dhdt_error = SingleRaster(self.dhdtprefix + '_dhdt_error.tif')
 		dhdt_res = SingleRaster(self.dhdtprefix + '_dhdt_residual.tif')
 		dhdt_count = SingleRaster(self.dhdtprefix + '_dhdt_count.tif')
+		return dhdt_dem, dhdt_error, dhdt_res, dhdt_count
 
 
 
