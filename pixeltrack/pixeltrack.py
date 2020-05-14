@@ -46,8 +46,8 @@ if args.step == 'ampcor' or args.step is None:
 	a = SingleRaster(ini.imagepair['image1'], date=ini.imagepair['image1_date'])
 	b = SingleRaster(ini.imagepair['image2'], date=ini.imagepair['image2_date'])
 	if ini.pxsettings['gaussian_hp']:
-		a.GaussianHighPass(sigma=3)
-		b.GaussianHighPass(sigma=3)
+		a.GaussianHighPass(sigma=ini.pxsettings['gaussian_hp_sigma'])
+		b.GaussianHighPass(sigma=ini.pxsettings['gaussian_hp_sigma'])
 	a.AmpcorPrep()
 	b.AmpcorPrep()
 

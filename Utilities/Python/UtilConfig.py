@@ -158,6 +158,11 @@ class ConfParams:
 				self.pxsettings['gaussian_hp'] = bool(int(self.pxsettings['gaussian_hp']))
 			else:
 				self.pxsettings['gaussian_hp'] = False
+			if 'gaussian_hp_sigma' in self.pxsettings:
+				self.pxsettings['gaussian_hp_sigma'] = float(self.pxsettings['gaussian_hp_sigma']))
+			else:
+				self.pxsettings['gaussian_hp_sigma'] = 3.0
+
 		if hasattr(self, 'outputcontrol'):
 			if 'datepair_prefix' in self.outputcontrol:
 				self.outputcontrol['datepair_prefix'] = bool(int(self.outputcontrol['datepair_prefix']))
