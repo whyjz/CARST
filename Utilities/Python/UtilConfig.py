@@ -157,15 +157,21 @@ class ConfParams:
 			if 'gaussian_hp' in self.pxsettings:
 				self.pxsettings['gaussian_hp'] = bool(int(self.pxsettings['gaussian_hp']))
 			else:
-				self.pxsettings['gaussian_hp'] = False
+				self.pxsettings['gaussian_hp'] = True
+			if 'gaussian_hp_sigma' in self.pxsettings:
+				self.pxsettings['gaussian_hp_sigma'] = float(self.pxsettings['gaussian_hp_sigma'])
+			else:
+				self.pxsettings['gaussian_hp_sigma'] = 3.0
+
 		if hasattr(self, 'outputcontrol'):
 			if 'datepair_prefix' in self.outputcontrol:
-				self.outputcontrol['datepair_prefix'] = bool(int(self.outputcontrol['datepair_prefix']))
-				atime = datetime.strptime(self.imagepair['image1_date'], '%Y-%m-%d')
-				btime = datetime.strptime(self.imagepair['image2_date'], '%Y-%m-%d')
-				self.outputcontrol['label_datepair'] = atime.strftime('%Y%m%d') + '-' + btime.strftime('%Y%m%d' + '_')
-			else:
-				self.outputcontrol['if_generate_xyztext'] = False
+				if self.outputcontrol['datepair_prefix'] in ['false', 'f', 'no', 'n', '0']:
+					self.outputcontrol['if_generate_xyztext'] = False
+				else:
+					self.outputcontrol['datepair_prefix'] = bool(int(self.outputcontrol['datepair_prefix']))
+					atime = datetime.strptime(self.imagepair['image1_date'], '%Y-%m-%d')
+					btime = datetime.strptime(self.imagepair['image2_date'], '%Y-%m-%d')
+					self.outputcontrol['label_datepair'] = atime.strftime('%Y%m%d') + '-' + btime.strftime('%Y%m%d' + '_')
 			if 'output_folder' not in self.outputcontrol:
 				self.outputcontrol['output_folder'] = '.'
 		if hasattr(self, 'rawoutput'):
@@ -203,6 +209,10 @@ class ConfParams:
 					self.velocorrection['label_logfile'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.velocorrection['label_logfile'])
 				else:
 					self.velocorrection['label_logfile'] = os.path.join(self.outputcontrol['output_folder'], self.velocorrection['label_logfile'])
+			if 'refvelo_outlier_sigma' in self.velocorrection:
+				self.velocorrection['refvelo_outlier_sigma'] = float(self.velocorrection['refvelo_outlier_sigma'])
+			else:
+				self.velocorrection['refvelo_outlier_sigma'] = 3.0
 		if hasattr(self, 'noiseremoval'):
 			for key in self.noiseremoval:
 				self.noiseremoval[key] = float(self.noiseremoval[key])

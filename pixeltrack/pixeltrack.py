@@ -2,13 +2,20 @@
 #
 # Main pixel-tracking (feature-tracking) script
 # by Whyjay Zheng, Jul 6 2018
-# laste modified: May 8, 2019
+# laste modified: May 15, 2020
 
-# All concepts are from the old pixel-tracking code
-# but this code is using ampcor packing in ISCE instead of ROI_PAC
-# Hence, everything is rewritten to fit the CARST convention
+# The code uses the ampcor module, which was developed as part of 
+# ROI_PAC and was inherited by ISCE.
+# To use this script, ISCE must be installed first.
 #
-# usage: python pixeltrack.py config_file
+# usage: python pixeltrack.py config_file [-s STAGE]
+#
+# availabe STAGE name: 
+#    ampcor        ---> perform ampcor (amplitude correlator) using NCC
+#    rawvelo       ---> read the raw ampcor output data (in python's pickle format) and convert them into geotiffs
+#    correctvelo   ---> read the data at user-defined regions where velocity is assumed to be zero, and calculate corrected velocities and uncertainties
+#    rmnoise       ---> mask pixels with unreliable data
+# when -s option is omitted, the script will run all the steps 
 #
 # try: 
 #    python pixeltrack.py defaults.ini 
@@ -24,7 +31,6 @@ from UtilRaster import SingleRaster, RasterVelos
 from UtilConfig import ConfParams
 from UtilPX import ampcor_task, writeout_ampcor_task
 from UtilXYZ import ZArray, DuoZArray, AmpcoroffFile, points_in_polygon
-# from UtilFit import DemPile
 import numpy as np
 
 parser = ArgumentParser()
@@ -46,8 +52,8 @@ if args.step == 'ampcor' or args.step is None:
 	a = SingleRaster(ini.imagepair['image1'], date=ini.imagepair['image1_date'])
 	b = SingleRaster(ini.imagepair['image2'], date=ini.imagepair['image2_date'])
 	if ini.pxsettings['gaussian_hp']:
-		a.GaussianHighPass(sigma=3)
-		b.GaussianHighPass(sigma=3)
+		a.GaussianHighPass(sigma=ini.pxsettings['gaussian_hp_sigma'])
+		b.GaussianHighPass(sigma=ini.pxsettings['gaussian_hp_sigma'])
 	a.AmpcorPrep()
 	b.AmpcorPrep()
 
@@ -70,8 +76,6 @@ if args.step == 'correctvelo' or args.step is None:
 
 	# We don't do elevation-depended correction for this version.
 	# Maybe it will be included in the future release.
-
-	# Here's a newer version of doing velocity correction
 
 	ampoff = AmpcoroffFile(ini.rawoutput['label_ampcor'] + '.p')
 	ampoff.Load()
@@ -98,56 +102,11 @@ if args.step == 'correctvelo' or args.step is None:
 	vxraw_bdval = ZArray(ampoff.velo_x[idx, 2])
 	vyraw_bdval = ZArray(ampoff.velo_y[idx, 2])
 	vxyraw_bdval = DuoZArray(z1=vxraw_bdval, z2=vyraw_bdval, ini=ini)
-	vxyraw_bdval.OutlierDetection2D(thres_sigma=ini.noiseremoval['outlier_sigma_threshold'])
+	vxyraw_bdval.OutlierDetection2D(thres_sigma=ini.velocorrection['refvelo_outlier_sigma'])
 	vxyraw_bdval.HistWithOutliers(which='x')
 	vxyraw_bdval.HistWithOutliers(which='y')
 	vxraw_bdval_velo, vyraw_bdval_velo = vxyraw_bdval.VeloCorrectionInfo()
 	velo.VeloCorrection(vxraw_bdval_velo, vyraw_bdval_velo, ini.velocorrection['label_geotiff'])
-
-	#=================== Older method ===================
-
-	# vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx.png', ini=ini)
-	# vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vy.png', ini=ini)
-	# vxraw_bdval_velo, vyraw_bdval_velo = velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini, pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx-vs-vy.png' )
-
-	#=================== Oldest method ===================
-
-
-	# shp = ini.velocorrection['bedrock']
-	# prefix = ini.rawoutput['label_geotiff']
-	# velo = RasterVelos(vx=SingleRaster(prefix + '_vx.tif'),
-	# 	               vy=SingleRaster(prefix + '_vy.tif'),
-	# 	               snr=SingleRaster(prefix + '_snr.tif'),
-	# 	               mag=SingleRaster(prefix + '_mag.tif'),
-	# 	               errx=SingleRaster(prefix + '_errx.tif'),
-	# 	               erry=SingleRaster(prefix + '_erry.tif'))
-
-	# # SNR constraint
-	# snr_bdval = ZArray(velo.snr.ClippedByPolygon(shp))
-	# selected_bd_pos = snr_bdval >= ini.noiseremoval['snr']
-
-	# # Get raw X & Y resolution for calculating histogram bins
-	# # tmp = SingleRaster(ini.imagepair['image1'])
-	# # xres = tmp.GetXRes()
-	# # yres = tmp.GetYRes()
-	# # ini.pxsettings['searchwindow_x'] * 2
-	# # time 
-	# # -> to be continued (see UtilXYZ as well)
-
-
-
-	# # Extract points over bedrock
-	# vxraw_bdval = ZArray(velo.vx.ClippedByPolygon(shp))
-	# vxraw_bdval = vxraw_bdval[selected_bd_pos]
-	# vxraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx.png', ini=ini)
-
-	# vyraw_bdval = ZArray(velo.vy.ClippedByPolygon(shp))
-	# vyraw_bdval = vyraw_bdval[selected_bd_pos]
-	# vyraw_bdval.StatisticOutput(pngname=ini.velocorrection['label_bedrock_histogram'] + '_vy.png', ini=ini)
-
-	# velo.VeloCorrectionInfo(vxraw_bdval, vyraw_bdval, ini.velocorrection['label_logfile'], pngname=ini.velocorrection['label_bedrock_histogram'] + '_vx-vs-vy.png' )
-	# velo.VeloCorrection(vxraw_bdval, vyraw_bdval, ini.velocorrection['label_geotiff'])
-	#====================================================
 
 if args.step == 'rmnoise' or args.step is None:
 
@@ -164,7 +123,7 @@ if args.step == 'rmnoise' or args.step is None:
 		                   errmag=SingleRaster(prefix + '_errmag.tif'))
 
 	velo.SNR_CutNoise(snr_threshold=ini.noiseremoval['snr'])
-	velo.Gaussian_CutNoise()
+	velo.Gaussian_CutNoise(sigma=ini.noiseremoval['gaussian_lp_mask_sigma'])
 	velo.SmallObjects_CutNoise(min_size=ini.noiseremoval['min_clump_size'])
 	# velo.MorphoOpen_CutNoise()
 	# velo.Fahnestock_CutNoise()
