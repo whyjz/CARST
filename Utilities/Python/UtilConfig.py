@@ -159,7 +159,7 @@ class ConfParams:
 			else:
 				self.pxsettings['gaussian_hp'] = False
 			if 'gaussian_hp_sigma' in self.pxsettings:
-				self.pxsettings['gaussian_hp_sigma'] = float(self.pxsettings['gaussian_hp_sigma']))
+				self.pxsettings['gaussian_hp_sigma'] = float(self.pxsettings['gaussian_hp_sigma'])
 			else:
 				self.pxsettings['gaussian_hp_sigma'] = 3.0
 
