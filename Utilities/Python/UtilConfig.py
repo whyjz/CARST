@@ -184,28 +184,28 @@ class ConfParams:
 			else:
 				self.rawoutput['if_generate_ampofftxt'] = False
 			if 'label_ampcor' in self.rawoutput:
-				if self.outputcontrol['datepair_prefix']:
+				if self.outputcontrol['datepair_prefix'] not in ['false', 'f', 'no', 'n', '0']:
 					self.rawoutput['label_ampcor'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.rawoutput['label_ampcor'])
 				else:
 					self.rawoutput['label_ampcor'] = os.path.join(self.outputcontrol['output_folder'], self.rawoutput['label_ampcor'])
 			if 'label_geotiff' in self.rawoutput:
-				if self.outputcontrol['datepair_prefix']:
+				if self.outputcontrol['datepair_prefix'] not in ['false', 'f', 'no', 'n', '0']:
 					self.rawoutput['label_geotiff'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.rawoutput['label_geotiff'])
 				else:
 					self.rawoutput['label_geotiff'] = os.path.join(self.outputcontrol['output_folder'], self.rawoutput['label_geotiff'])
 		if hasattr(self, 'velocorrection'):
 			if 'label_bedrock_histogram' in self.velocorrection:
-				if self.outputcontrol['datepair_prefix']:
+				if self.outputcontrol['datepair_prefix'] not in ['false', 'f', 'no', 'n', '0']:
 					self.velocorrection['label_bedrock_histogram'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.velocorrection['label_bedrock_histogram'])
 				else:
 					self.velocorrection['label_bedrock_histogram'] = os.path.join(self.outputcontrol['output_folder'], self.velocorrection['label_bedrock_histogram'])
 			if 'label_geotiff' in self.velocorrection:
-				if self.outputcontrol['datepair_prefix']:
+				if self.outputcontrol['datepair_prefix'] not in ['false', 'f', 'no', 'n', '0']:
 					self.velocorrection['label_geotiff'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.velocorrection['label_geotiff'])
 				else:
 					self.velocorrection['label_geotiff'] = os.path.join(self.outputcontrol['output_folder'], self.velocorrection['label_geotiff'])
 			if 'label_logfile' in self.velocorrection:
-				if self.outputcontrol['datepair_prefix']:
+				if self.outputcontrol['datepair_prefix'] not in ['false', 'f', 'no', 'n', '0']:
 					self.velocorrection['label_logfile'] = os.path.join(self.outputcontrol['output_folder'], self.outputcontrol['label_datepair'] + self.velocorrection['label_logfile'])
 				else:
 					self.velocorrection['label_logfile'] = os.path.join(self.outputcontrol['output_folder'], self.velocorrection['label_logfile'])
