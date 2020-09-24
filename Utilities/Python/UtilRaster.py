@@ -182,6 +182,10 @@ class SingleRaster:
 		# print('xbound:', ulx, lrx, 'ybound:', uly, lry)
 		# if y > 220000:
 		# 	print(x, y, 'xbound:', ulx, lrx, 'ybound:', uly, lry)
+		nodatval = self.GetNoDataValue(band=band)
+		if nodatval is None:
+			nodatval = 0
+		
 		if (ulx <= x < lrx) & (uly >= y > lry):
 			ds = gdal.Open(self.fpath)
 			px = int((x - ulx) / xres) # x pixel coor
@@ -192,7 +196,7 @@ class SingleRaster:
 			# print('pixel_val: {}'.format(pixel_val))
 			# print('nodata: {}'.format(self.GetNoDataValue(band=band)))
 			# print('abs: {}'.format(abs(pixel_val - self.GetNoDataValue(band=band))))
-			if abs(pixel_val - self.GetNoDataValue(band=band)) < 1:
+			if abs(pixel_val - nodatval) < 1:
 				pixel_val = np.nan
 			return pixel_val
 		else:
@@ -219,13 +223,17 @@ class SingleRaster:
 		ds = gdal.Open(self.fpath)
 		dsband = ds.GetRasterBand(band)
 
+		nodatval = self.GetNoDataValue(band=band)
+		if nodatval is None:
+			nodatval = 0
+
 		for i in idx[0]:
 			# print(x[i])
 			px = int((x[i] - ulx) / xres) # x pixel coor
 			py = int((y[i] - uly) / yres) # y pixel coor
 			pixel_val = dsband.ReadAsArray(px, py, 1, 1)   # it numpy.array with shape of (1, 1)
 			pixel_val = float(pixel_val)
-			if abs(pixel_val - self.GetNoDataValue(band=band)) < 1:
+			if abs(pixel_val - nodatval) < 1:
 				pixel_val = np.nan
 			z[i] = pixel_val
 
