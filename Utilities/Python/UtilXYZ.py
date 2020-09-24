@@ -48,8 +48,8 @@ class DuoZArray:
 			plt.axis('scaled')
 			plt.xlim([ax_center[0] - ax_halfwidth, ax_center[0] + ax_halfwidth])
 			plt.ylim([ax_center[1] - ax_halfwidth, ax_center[1] + ax_halfwidth])
-			plt.ylabel('Offset-X (pixels)')
-			plt.xlabel('Offset-Y (pixels)')
+			plt.ylabel('Offset-Y (pixels)')
+			plt.xlabel('Offset-X (pixels)')
 			plt.subplot(122)
 			plt.scatter(x, y, c=z, **pt_style)
 			plt.scatter(x[~idx], y[~idx], c='xkcd:red', **pt_style)
@@ -657,7 +657,7 @@ def points_in_polygon(points_geometry, shp_filename):
 
 
 	shapefile = gpd.read_file(shp_filename)
-	poly_geometries = [shapefile.ix[i]['geometry'] for i in range(len(shapefile))]
+	poly_geometries = [shapefile.loc[i]['geometry'] for i in range(len(shapefile))]
 	pt_geometries = [Point(xy) for xy in zip(points_geometry[:, 0], points_geometry[:, 1])]
 	pt_gs = gpd.GeoSeries(pt_geometries)
 

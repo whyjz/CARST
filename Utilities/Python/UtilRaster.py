@@ -414,7 +414,8 @@ class SingleRaster:
 		# PROBABLY HAVE TO CHANGE TO out_image[0] HERE
 		# extract the valid values
 		# and return them as a numpy 1-D array
-		return np.extract(clipped_data != nodata, clipped_data)
+		# return np.extract(clipped_data != nodata, clipped_data)
+		return clipped_data
 
 	def GaussianHighPass(self, sigma=3, truncate=1.0):
 
@@ -461,6 +462,28 @@ class SingleRaster:
 		lp_raster = SingleRaster(lp_raster_path)
 		lp_raster.Array2Raster(lowpass, self)
 		self.SetPath(lp_raster_path)
+
+	def CannyEdge(self, sigma=3):
+
+		"""
+		Canny Edge filter. Default sigma = 3.
+		deal with nodata values.
+		https://scikit-image.org/docs/dev/auto_examples/edges/plot_canny.html
+		"""
+
+		from skimage import feature
+		data = self.ReadAsArray()
+		nodata_pos = data == self.GetNoDataValue()
+		data[nodata_pos] = 0
+
+		edges = feature.canny(data, sigma=sigma)
+		edges[nodata_pos] = self.GetNoDataValue()
+
+		canny_raster_path = self.fpath.rsplit('.', 1)[0] + '_Canny-' + str(sigma) + 'sig.tif'
+		canny_raster = SingleRaster(canny_raster_path)
+		canny_raster.Array2Raster(edges, self)
+		self.SetPath(canny_raster_path)
+
 
 
 class RasterVelos():

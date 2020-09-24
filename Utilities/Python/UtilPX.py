@@ -92,6 +92,10 @@ def create_ampcor_task(ini):
 	a.skipSampleAcross = ini.pxsettings['skip_across']
 	a.skipSampleDown = ini.pxsettings['skip_down']          # waiting to be modified
 	a.oversamplingFactor = ini.pxsettings['oversampling']
+	# if min(ini.pxsettings['searchwindow_y'], ini.pxsettings['searchwindow_x']) <= 8:
+	# 	a.zoomWindowSize = 4          
+	# it seems that changing zoomWindowSize would result in a crash.
+	# Thus, the minimum accpetable searchwindow size for now is 9 x 9.
 	return a
 
 def multicore_ampcor(downrange, a, imgpair):

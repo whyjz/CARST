@@ -60,7 +60,8 @@ Configuration Parameters
 - *skip_down*:   Skip in y-direction. Also determines the output pixel spacing in y-direction ("every n pixels")
 - *oversampling*: Oversampling rate (n per pixel)
 - *threads*: How many CPU threads to be used
-- *gaussian_hp*: 0 to turn off; 1 to turn on the gaussian high-pass filter before doing PX
+- *gaussian_hp*: 0 to turn off; 1 to turn on the gaussian high-pass (GHP) filter before doing PX
+- *gaussian_hp_sigma*: the strength of the GHP filter. default is 3 sigma
 
 [outputcontrol]: Output filename control
 
@@ -80,12 +81,12 @@ Configuration Parameters
 - *label_bedrock_histogram*: bedrock histogram file label
 - *label_geotiff*: geotiff file label
 - *label_logfile*: log file label
+- *refvelo_outlier_sigma*: the sigma threshold for determining what pixels would be classified as outliers when calculating bedrock histograms and uncertainty
 
 [noiseremoval]: Parameters for noise removal
 
 - *snr*: Signal-to-Noise ratio
-- *peak_detection*: DEPRECATED
-- *backcor_order*: DEPRECATED
+- *gaussian_lp_mask_sigma*: the strength of the Gaussian low-pass filter, which is used as a mask to filter out bad data (default is 5)
 - *min_clump_size*: minimum clump size to be recgonized as trul signal
 
 DEMO
