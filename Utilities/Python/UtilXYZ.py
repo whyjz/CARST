@@ -143,6 +143,8 @@ class ZArray(np.ndarray):
 	# https://docs.scipy.org/doc/numpy-1.13.0/user/basics.subclassing.html
 	# for more details.
 
+	#WARNING: NO NANs SHOULD BE FOUND IN ZArray !!! IT CAN GIVE YOU A BAD RESULT !!!
+
 	def __new__(cls, input_array):
 		# For now input_array should be a 1-d array
 		# Input array is an already formed ndarray instance
@@ -166,6 +168,49 @@ class ZArray(np.ndarray):
 		# self.signal_val = getattr(obj, 'signal_val', None)
 		# self.signal_n   = getattr(obj, 'signal_n', None)
 		self.signal_array = getattr(obj, 'signal_array', None)
+
+	# =============================================================================================
+	# ==== The following functions represent new functions developed from =========================
+	# ==== StatisticOutput and HistWithOutliers. ==================================================
+	# =============================================================================================
+
+	def MADStats(self):
+		mad = lambda x : 1.482 * np.median(abs(x - np.median(x)))
+		if self.size <= 3:
+			print('WARNING: there are too few Z records (<= 3). Aborting the calculation.')
+			return [], np.nan, np.nan, np.nan
+		else:
+			val_median = np.median(self)
+			val_mad = mad(self)
+			lbound = val_median - 3. * val_mad
+			ubound = val_median + 3. * val_mad
+			idx = np.logical_and(self >= lbound, self <= ubound)
+
+			self.MAD_idx = idx
+			self.MAD_mean = np.mean(self[idx])
+			self.MAD_median = np.median(self[idx])
+			self.MAD_std = np.std(self[idx], ddof=1)
+
+	def MADHist(self, pngname):
+
+		nbins = len(self) // 4 + 1
+		nbins = 201 if nbins > 201 else nbins
+
+		bins = np.linspace(min(self), max(self), nbins)
+		plt.hist(self, bins=bins, color='xkcd:red')
+		plt.hist(self[self.MAD_idx], bins=bins, color='xkcd:blue')
+		plt.ylabel('N')
+		plt.xlabel('Value (pixel value unit)')
+		plt.savefig(pngname, format='png')
+		plt.cla()
+
+	# =============================================================================================
+	# ==== The functions above represent new functions developed from =============================
+	# ==== StatisticOutput and HistWithOutliers. ==================================================
+	# =============================================================================================
+
+
+
 
 	# =============================================================================================
 	# ==== The following functions are designed firstly for the functions in the class XYZFile ====

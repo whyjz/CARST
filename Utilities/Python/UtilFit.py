@@ -8,6 +8,7 @@ import numpy as np
 from numpy.linalg import inv
 import os
 import sys
+import gdal
 from datetime import datetime
 from shapely.geometry import Polygon
 from scipy.interpolate import interp2d
@@ -16,6 +17,7 @@ from scipy.interpolate import griddata
 import gc
 from UtilRaster import SingleRaster
 import pickle
+import matplotlib.pyplot as plt
 
 def timeit(func):
     def time_wrapper(*args, **kwargs):
@@ -27,6 +29,24 @@ def timeit(func):
         print('Time taken: ' + str(time_b - time_a))
         return dec_func
     return time_wrapper
+
+def Resample_Array2(orig_dem, resamp_ref_dem, resampleAlg='bilinear'):
+
+	"""
+	resample orig_dem using the extent and spacing provided by resamp_ref_dem
+	orig_dem: class UtilRaster.SingleRaster object
+	resamp_ref_dem: class UtilRaster.SingleRaster object
+	returns: an numpy array, which you can use the methods in UtilRaster to trasform it into a raster
+
+	This one uses gdal.Warp API.
+	"""
+
+	ds = gdal.Open(orig_dem.fpath)
+	ulx, uly, lrx, lry = resamp_ref_dem.GetExtent()
+	opts = gdal.WarpOptions(outputBounds=(ulx, lry, lrx, uly), xRes=resamp_ref_dem.GetXRes(), yRes=resamp_ref_dem.GetYRes(), resampleAlg=resampleAlg)
+	out_ds = gdal.Warp('tmp.tif', ds, options=opts)
+	return out_ds.GetRasterBand(1).ReadAsArray()
+
 
 def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 
@@ -119,22 +139,22 @@ def EVMD_idx(y, validated_value, threshold=6):
 			validated_range = [min(tmp), max(tmp)]
 	return idx
 
-def wlr_corefun(x, y, ye):
+def wlr_corefun(x, y, ye, evmd_threshold=6, detailed=False):
 	# wlr = weighted linear regression.
-	exitstate, validated_value = EVMD(y, threshold=6)
+	exitstate, validated_value = EVMD(y, threshold=evmd_threshold)
 	if exitstate >= 0 or (max(x) - min(x)) < 1:
 		slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
 		return slope, slope_err, resid, count
 	else:
 		# if x.size == 3:
 		# print(x, y, ye)
-		idx = EVMD_idx(y, validated_value, threshold=6)
+		idx = EVMD_idx(y, validated_value, threshold=evmd_threshold)
 		if sum(idx) >= 3:
 			x = x[idx]
 			y = y[idx]
 			ye = ye[idx]
 			w     = [1 / k for k in ye]
-			G     = np.vstack([x, np.ones(x.size)]).T
+			G     = np.vstack([x, np.ones(x.size)]).T   # defines the model (y = a + bx)
 			W     = np.diag(w)
 			Gw    = W @ G
 			yw    = W @ y.T                          # assuming y is a 1-by-N array
@@ -153,10 +173,16 @@ def wlr_corefun(x, y, ye):
 			count = x.size
 			# if resid > 100000:
 			# 	print(x,y,ye,cookd,goodpoint)
-			return slope, slope_err, resid, count
+			if detailed:
+				return slope, slope_err, resid, count, x, y, y_est
+			else:
+				return slope, slope_err, resid, count
 		else:
 			slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
-			return slope, slope_err, resid, count
+			if detailed:
+				return slope, slope_err, resid, count, x, y, y
+			else:
+				return slope, slope_err, resid, count
 
 
 		# ============ Using Cook's Distance ============
@@ -228,7 +254,41 @@ def wlr_corefun(x, y, ye):
 	# 	residual = np.sum((np.polyval(p, x[:-2]) - y[:-2]) ** 2)
 	# return slope, slope_err, residual
 
-
+def onclick_wrapper(data, fig, ax):
+	def onclick(event):
+	    print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+	          ('double' if event.dblclick else 'single', event.button,
+	           event.x, event.y, event.xdata, event.ydata))
+	    col = int(event.xdata)
+	    row = int(event.ydata)
+	    xx = np.array(data[row][col]['date'])
+	    yy = np.array(data[row][col]['value'])
+	    ye = np.array(data[row][col]['uncertainty'])
+	    slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=80, detailed=True)
+	    SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
+	    SSRes = np.sum((y_good - y_goodest) ** 2)
+	    SST = np.sum((y_good - np.mean(y_good)) ** 2)
+	    Rsquared = 1 - SSRes / SST
+	    ax.plot(event.xdata, event.ydata, '.', markersize=10, markeredgewidth=1, markeredgecolor='k', color='xkcd:green')
+	    fig.canvas.draw()
+	    figi = plt.figure()
+	    axi = plt.gca()
+	    axi.errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='ko')
+	    np.set_printoptions(precision=3)
+	    np.set_printoptions(suppress=True)
+	    xye = np.vstack((xx,yy,ye)).T
+	    print(xye[xye[:,1].argsort()])
+	    # print(xx)
+	    # print(yy)
+	    # print(ye)
+	    axi.plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
+	    axi.plot(x_good, y_good, '.', color='r', markersize=8, zorder=30)
+	    axi.text(0.1, 0.1, 'R^2 = {:.4f}'.format(Rsquared), transform=ax.transAxes)
+	    axi.set_xlabel('days, from 2015-01-01')
+	    axi.set_ylabel('height (m)')
+	    # plt.plot(xx, yy)
+	    figi.show()
+	return onclick
 
 
 
@@ -254,6 +314,7 @@ class DemPile(object):
 			self.refgeomask = refgeo.ReadAsArray().astype(bool)
 		self.fitdata = {'slope': [], 'slope_err': [], 'residual': [], 'count': []}
 		self.maskparam = {'max_uncertainty': 9999, 'min_time_span': 0}
+		self.evmd_threshold = 6
 
 	def AddDEM(self, dems):
 		# ==== Add DEM object list ====
@@ -289,6 +350,10 @@ class DemPile(object):
 		if 'min_time_span' in ini.settings:
 			self.maskparam['min_time_span'] = float(ini.settings['min_time_span'])
 
+	def SetEVMDThreshold(self, ini):
+		if 'evmd_threshold' in ini.regression:
+			self.evmd_threshold = float(ini.regression['evmd_threshold'])
+
 	def InitTS(self):
 		# ==== Prepare the reference geometry ====
 		refgeo_Ysize = self.refgeo.GetRasterYSize()
@@ -304,6 +369,7 @@ class DemPile(object):
 		self.SetRefGeo(ini.refgeometry['gtiff'])
 		self.SetRefDate(ini.settings['refdate'])
 		self.SetMaskParam(ini)
+		self.SetEVMDThreshold(ini)
 
 	@timeit
 	def PileUp(self):
@@ -312,7 +378,8 @@ class DemPile(object):
 			print('{}) {}'.format(i + 1, os.path.basename(self.dems[i].fpath) ))
 			if self.dems[i].uncertainty <= self.maskparam['max_uncertainty']:
 				datedelta = self.dems[i].date - self.refdate
-				znew = Resample_Array(self.dems[i], self.refgeo, resamp_method='linear')
+				# znew = Resample_Array(self.dems[i], self.refgeo, resamp_method='linear')
+				znew = Resample_Array2(self.dems[i], self.refgeo)
 				znew_mask = np.logical_and(znew > 0, self.refgeomask)
 				fill_idx = np.where(znew_mask)
 				for m,n in zip(fill_idx[0], fill_idx[1]):
@@ -364,9 +431,9 @@ class DemPile(object):
 				# Whyjay: May 10, 2018: cancelled the min date span (date[-1] - date[0] > 0), previously > 200
 				# if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 0):
 				if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
-					slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty)
-					if residual > 100:
-						print(date, value, uncertainty)
+					slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty, self.evmd_threshold)
+					# if residual > 100:
+					# 	print(date, value, uncertainty)
 					self.fitdata['slope'][m, n] = slope
 					self.fitdata['slope_err'][m, n] = slope_err
 					self.fitdata['residual'][m, n] = residual
@@ -387,6 +454,13 @@ class DemPile(object):
 		dhdt_error.Array2Raster(self.fitdata['slope_err'], self.refgeo)
 		dhdt_res.Array2Raster(self.fitdata['residual'], self.refgeo)
 		dhdt_count.Array2Raster(self.fitdata['count'], self.refgeo)
+
+	def ShowDhdtTifs(self):
+		dhdt_dem = SingleRaster(self.dhdtprefix + '_dhdt.tif')
+		dhdt_error = SingleRaster(self.dhdtprefix + '_dhdt_error.tif')
+		dhdt_res = SingleRaster(self.dhdtprefix + '_dhdt_residual.tif')
+		dhdt_count = SingleRaster(self.dhdtprefix + '_dhdt_count.tif')
+		return dhdt_dem, dhdt_error, dhdt_res, dhdt_count
 
 
 
