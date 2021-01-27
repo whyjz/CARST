@@ -36,7 +36,7 @@ class DuoZArray:
 		self.signal_idx = idx
 
 		if plot:
-			pt_style = {'s': 5, 'edgecolor': ''}
+			pt_style = {'s': 5, 'edgecolor': None}
 			ax_center = [x[idx].mean(), y[idx].mean()]
 			ax_halfwidth = max([max(x) - x[idx].mean(), 
 				                x[idx].mean() - min(x),
