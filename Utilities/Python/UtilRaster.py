@@ -5,9 +5,22 @@
 # last edit: Dec 7 2016 (fixed a bug of SingleRaster.Array2Raster -> nodatavalue)
 # last edit: Doc 12 2016 (Change the self.uncertainty in __init__ and add ReadGeolocPoint method) 
 # last edit: Sep 11 2018 (added a new class: RasterVelos)
+# last edit: Mar 01 2021 (enable URL support)
 
 import sys
 import os
+
+##### Make URL file to work: deactive the DODS driver
+# https://github.com/mapbox/rasterio/issues/1000
+# https://trac.osgeo.org/gdal/ticket/2696
+
+### method #1
+# gdal.GetDriverByName('DODS').Deregister()
+### method #2
+os.environ["GDAL_SKIP"] = 'DODS'
+#####################################################
+
+
 import subprocess
 from subprocess import PIPE
 import numpy as np
@@ -18,6 +31,7 @@ except:
 	from osgeo import gdal        # sometimes gdal is part of osgeo modules
 from osgeo import osr
 # we assume the fpath is the file with .tif or .TIF suffix.
+
 
 def timeit(func):
     def time_wrapper(*args, **kwargs):
