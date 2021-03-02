@@ -371,7 +371,10 @@ class SingleRaster:
 		vrtpath = Path(self.fpath + '.vrt')
 		if not vrtpath.is_file():
 			print('Calling gdalbuildvrt...')
-			gdalbuildvrt_cmd = 'gdalbuildvrt ' + self.fpath + '.vrt ' + self.fpath
+			if self.fpath.startswith('http'):
+				gdalbuildvrt_cmd = 'gdalbuildvrt ' + os.path.basename(self.fpath) + '.vrt ' + self.fpath
+			else:
+				gdalbuildvrt_cmd = 'gdalbuildvrt ' + self.fpath + '.vrt ' + self.fpath
 			print(gdalbuildvrt_cmd)
 			retcode = subprocess.call(gdalbuildvrt_cmd, shell=True)
 			if retcode != 0:
