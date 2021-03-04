@@ -15,7 +15,7 @@ from scipy.interpolate import interp2d
 from scipy.interpolate import NearestNDInterpolator
 from scipy.interpolate import griddata
 import gc
-from UtilRaster import SingleRaster
+from carst.libraster import SingleRaster
 import pickle
 import matplotlib.pyplot as plt
 

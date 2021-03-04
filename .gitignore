@@ -4,6 +4,8 @@
 **/gmt.history
 **/*.aux.xml
 **/isce.log
+carst.egg-info/
+*.ipynb_checkpoints/
 pixeltrack/Demo_Data/20180401-20180417*.tif
 other_process/log_getUncertaintyDEM_grdtrack_output.xyz
 dhdt/Demo_DEMs/HookerFJL_10m_dhdt*

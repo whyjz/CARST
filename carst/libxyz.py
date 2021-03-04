@@ -7,7 +7,7 @@
 # by Whyjay Zheng, Jul 10 2018
 
 import numpy as np
-from UtilRaster import SingleRaster
+from carst.libraster import SingleRaster
 from scipy.interpolate import griddata
 from scipy.stats import gaussian_kde
 import pickle
