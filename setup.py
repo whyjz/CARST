@@ -18,5 +18,7 @@ setuptools.setup(
     url="https://github.com/whyjz/CARST.git",
     license="MIT",
     packages=setuptools.find_packages(),
-    install_requires=INSTALL_REQUIRES
+    install_requires=INSTALL_REQUIRES,
+    python_requires=">=3",
+    scripts=["bin/dhdt.py", "bin/featuretrack.py"]
 )

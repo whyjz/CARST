@@ -17,9 +17,8 @@
 from argparse import ArgumentParser
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
-from UtilConfig import ConfParams
-from UtilFit import DemPile, onclick_wrapper
+from carst import ConfParams
+from carst.libdhdt import DemPile, onclick_wrapper
 import matplotlib.pyplot as plt
 import numpy as np
 

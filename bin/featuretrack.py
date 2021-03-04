@@ -26,11 +26,9 @@
 from argparse import ArgumentParser
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.dirname(sys.argv[0])) + '/../Utilities/Python')        # for all modules
-from UtilRaster import SingleRaster, RasterVelos
-from UtilConfig import ConfParams
-from UtilPX import ampcor_task, writeout_ampcor_task
-from UtilXYZ import ZArray, DuoZArray, AmpcoroffFile, points_in_polygon
+from carst import SingleRaster, RasterVelos, ConfParams
+from carst.libft import ampcor_task, writeout_ampcor_task
+from carst.libxyz import ZArray, DuoZArray, AmpcoroffFile, points_in_polygon
 import numpy as np
 
 parser = ArgumentParser()
