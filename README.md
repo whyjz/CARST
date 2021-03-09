@@ -61,8 +61,8 @@ Versions & How to cite CARST
 
 **Citing CARST software**:
 
-- Zheng, W., Durkin, W. J., Melkonian, A. K., & Pritchard, M. E. (2019, October 8). Cryosphere And Remote 
-  Sensing Toolkit (CARST) v1.0.1 (Version v1.0.1). Zenodo. http://doi.org/10.5281/zenodo.3475693
+- Zheng, W., Durkin, W. J., Melkonian, A. K., & Pritchard, M. E. (2021, March 9). Cryosphere And Remote 
+  Sensing Toolkit (CARST) v2.0.0a1 (Version v2.0.0a1). Zenodo. http://doi.org/10.5281/zenodo.3475693
 
 In addtional to citing this package, we also recommend that you cite one or more of these papers based on what park of CARST you use.
 
