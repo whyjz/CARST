@@ -1,10 +1,33 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+_version.py
+
+
 **/*~
-**/*.pyc
-**/__pycache__
 **/gmt.history
 **/*.aux.xml
 **/isce.log
-carst.egg-info/
 *.ipynb_checkpoints/
 examples/featuretrack/Demo_Data/LC08*sig.tif
 examples/featuretrack/Demo_Data/20180401-20180417_*.tif
