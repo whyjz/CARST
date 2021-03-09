@@ -8,6 +8,7 @@ with open("requirements.txt") as f:
 
 setuptools.setup(
     name="carst",
+    version="2.0.0-alpha",
     author="The CARST Developers",
     author_email="wz278@cornell.edu",
     maintainer="Whyjay Zheng",

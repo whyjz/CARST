@@ -2,28 +2,14 @@ Total points over bedrock =      876
 -------- Unit: Pixels --------
 median_x_px    = -1.094
 median_y_px    =  0.344
-<<<<<<< HEAD
 std_x_px       =  0.701
 std_y_px       =  0.408
 mean_x_px      = -1.168
 mean_y_px      =  0.373
-=======
-std_x_px       =  0.499
-std_y_px       =  0.449
-mean_x_px      = -1.209
-mean_y_px      =  0.339
->>>>>>> master
 -------- Unit: Velocity (L/T; most likely m/day) --------
 median_x       = -1.025
 median_y       =  0.322
-<<<<<<< HEAD
 std_x          =  0.657
 std_y          =  0.382
 mean_x         = -1.095
 mean_y         =  0.349
-=======
-std_x          =  0.467
-std_y          =  0.421
-mean_x         = -1.134
-mean_y         =  0.318
->>>>>>> master

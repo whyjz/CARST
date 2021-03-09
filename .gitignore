@@ -6,8 +6,11 @@
 **/isce.log
 carst.egg-info/
 *.ipynb_checkpoints/
-pixeltrack/Demo_Data/20180401-20180417*.tif
+examples/featuretrack/Demo_Data/LC08*sig.tif
+examples/featuretrack/Demo_Data/20180401-20180417_*.tif
+examples/featuretrack/Demo_Data/20180401-20180417_*.p
+examples/dhdt/Demo_DEMs/HookerFJL_10m_dhdt*
+examples/dhdt/Demo_DEMs/refgeo_10m_TSpickle.p
+examples/dhdt/tmp.tif
 other_process/log_getUncertaintyDEM_grdtrack_output.xyz
-dhdt/Demo_DEMs/HookerFJL_10m_dhdt*
-dhdt/Demo_DEMs/refgeo_10m_TSpickle.p
 Utilities/unused/PXData/*
