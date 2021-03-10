@@ -1,0 +1,310 @@
+\documentclass[12pt]{article}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{lineno}
+\usepackage{natbib}
+\usepackage[margin=1in]{geometry}
+
+\newenvironment{myindentpar}[1]%
+{\begin{list}{}%
+ {\setlength{\leftmargin}{#1}}%
+  \item[]%
+ }
+{\end{list}}
+
+\title{SAR Pixel-Tracking Using ``pixelTrack.py''}
+
+
+%\bibliographystyle{agufull08}
+
+\author{Andrew Kenneth Melkonian}
+\begin{document}
+
+\maketitle
+
+\vspace{1pt}
+\hrule
+\vspace{2pt}
+
+\noindent {\bf Prerequisites:}
+
+{\bf Python,} including numpy, scipy, pylab, and matplotlib
+
+{\bf ROI\_PAC,} with paths set up by ``SAR\_CONFIG'' or equivalent file and ROI\_PAC scripts and executables added to your path in the ``.bashrc'' and/or ``.bash\_profile'' files (for bash users).
+
+{\bf Perl,} to run ROI\_PAC scripts. \\
+
+\vspace{1pt}
+\hrule
+\vspace{2pt}
+
+\noindent {\bf USAGE:} \\
+
+\noindent python pixelTrack.py params.txt start\_step end\_step \\
+
+\vspace{1pt}
+\hrule
+\vspace{2pt}
+
+\noindent {\bf Input:} \\
+
+{\bf start\_step/end\_step:} Valid start and end steps, can be one of the following: \\
+
+uncompress/preraw/makeraw/setup/baselines/offsets/ampcor/make\_unw/affine/geocode \\
+
+The steps are listed in order, make sure ``start\_step'' is BEFORE ``end\_step'' on the above list. \\
+
+{\bf params.txt:} ASCII text file setting parameters used by scripts, for example: \\
+
+::::::::::::::
+
+params\_ALOS\_example.txt
+
+:::::::::::::: \\
+
+WorkPath	=	/data/username123/ALOS
+
+DEM		=	/data/username123/DEM/my\_favorite\_dem.dem
+
+MaxBaseline	=	2000 
+
+MinDateInterval	=	45
+
+MaxDateInterval	=	47 
+
+DataType	=	ALOS
+
+Angle		=	34.3 
+
+rwin		=	40 
+
+awin		=	80 
+
+search\_x	=	16 
+
+search\_y	=	16 
+
+wsamp		=	4
+
+numproc		=	2 \\
+
+
+{\bf WorkPath:} Directory to work in, this should contain the files necessary to process from ``start\_step'' to ``end\_step''.
+The requirements will vary from step to step.
+NOTE: A different directory should be set up for different paths/tracks, the script will NOT distinguish between scenes from different paths/tracks when applying the criteria described below.
+
+{\bf DEM:} DEM to use, should be the same format as DEMs used for standard ROI\_PAC processing (often get\_SRTM3.pl can be used to obtain a properly-formatted DEM).
+
+{\bf MaxBaseline:} Pairs with an average perpendicular baseline above this value will NOT be processed further (the script checks this against the values in the *baseline*.rsc file).
+
+{\bf MinDateInterval:} Minimum date interval, pairs with a separation time BELOW this value will NOT be processed.
+
+{\bf MaxDateInterval:} Maximum date interval, pairs with a separation time ABOVE this value will NOT be processed.
+
+{\bf DataType:} The sensor/satellite that the data was acquired by, can be ``ALOS'', ``ERS'', or ``TSX''.
+
+{\bf Angle:} Look angle of the satellite, for ``TSX'' data type this value is determined from the metadata.
+
+{\bf rwin:} Reference window size in the range direction (in pixels), should reflect the ``pixel\_ratio'' calculated for this pair. 
+``pixel\_ratio'' is the ratio of the ground pixel size in the range direction to the ground pixel size in the azimuth direction.
+
+{\bf awin:} Reference window size in the azimuth direction (in pixels), should reflect the ``pixel\_ratio'' calculated for this pair.
+
+{\bf search\_x:} Search window size in the range direction (in pixels), should be set to capture the maximum expected motion.
+
+{\bf search\_y:} Search window size in the range direction (in pixels), should be set to capture the maximum expected motion.
+
+{\bf wsamp:} Determines the sampling frequency, which will be rwin/wsamp in the range direction and awin/wsamp in the azimuth.
+For the example above, the values would result in the offset being calculated every 10 pixels in the range direction and every twenty in the azimuth direction.
+The pixel-tracking output would therefore be downsampled by a factor of 10 in the range and 20 in the azimuth relative to the full-resolution ``*.slc'' files.
+
+{\bf numproc:} Number of processors to run on, for Linux or MacOS-X use the command ``top'' then enter ``1'' to check how many ``processors'' there are. \\
+
+\noindent {\bf Summary:}
+
+These parameters are set up to run ALOS pairs in the directory /data/username123/ALOS, using two processors for EACH pair.
+Only pairs with a baseline below 2000 and a separation time of 46 days are run. \\
+
+
+\vspace{1pt}
+\hrule
+\vspace{2pt}
+
+\noindent {\bf EXAMPLE RUN FOR ALOS:}
+
+``/data/username123/ALOS'' contains uncompressed ALOS data files of the form ``ALPS*.zip'' (and does NOT contain any other files, for now).
+Create the file ``params.txt'' in ``/data/username123/ALOS'' and use the values given in the example parameters file above.
+Run ``cd /data/username123/ALOS'' then run ``python /path/to/pixelTrack.py params.txt uncompress preraw''.
+Make sure you are ALWAYS in ``/data/username123/ALOS'' when running the pixel-tracking script.
+The result should be that the zip files are unzipped and also copied to a newly-created backup folder named ``ARCHIVE''.
+
+Next run ``python /path/to/pixelTrack.py params.txt preraw makeraw''
+The result should be that the contents of the files unzipped in the last step are moved to their appropriately-labeled 6-digit date directories (YYMMDD), ready for the ``makeraw'' step.
+
+Next run ``python /path/to/pixelTrack.py params.txt makeraw setup''.
+The result should be that the appropriate ROI\_PAC ``make\_raw*.pl'' script is run, and *.raw files created in each 6-digit date folder.
+
+Next run ``python /path/to/pixelTrack.py params.txt setup baselines''.
+The result should be that ``int\_date1\_date2'' directories and ``*.proc'' files are set up for date pairs that meet the criteria given in ``params.txt''.
+
+Next run ``python /path/to/pixelTrack.py params.txt baselines offsets''.
+The result should be that a ``*baseline.rsc'' file is created for each pair.
+
+Next run ``python /path/to/pixelTrack.py offsets ampcor''.
+This step NOT the pixel-tracking step, rather, it is part of the standard ROI\_PAC processing that coregisters the ``*.slc'' files (SAR images) for each pair.
+
+Next run ``python /path/to/pixelTrack.py ampcor make\_unw''.
+This will set up everything so that the pixel-tracking can be run, and then will output the commands necessary to perform the pixel-tracking to the screen.
+The user then manually runs the commands by copying the output of this step and pasting it in the command line.
+ALTERNATIVELY, you can run ``python /path/to/pixelTrack.py ampcor make\_unw > run\_amp.cmd'', the ``chmod u+x run\_amp.cmd'', then ``./run\_amp.cmd''.
+
+Next run ``python /path/to/pixelTrack.py make\_unw affine''.
+The result will be ``azimuth*.unw'', ``range*.unw'', and ``snr*.unw'' files for each pair that contain the azimuth offsets, range offsets and signal-to-noise ratios, respectively.
+
+Next run ``python /path/to/pixelTrack.py affine geocode''.
+This will run a slightly modified version of several ROI\_PAC scripts that will find and save the affine transformation parameters between the DEM and the radar to be used in geocoding.
+The result should be a ``*.aff'' file for each pair.
+
+Next run ``python /path/to/pixelTrack.py geocode''.
+This will create ``geo\_azimuth*.unw'', ``geo\_range*.unw'' and ``geo\_snr*.unw'' files for each pair that contain the geocoded azimuth offsets, range offsets and signal-to-noise ratios, respectively.
+
+
+%\pagestyle{empty}
+%\begin{center}{\bf Andrew Kenneth Melkonian, M.S. Geoscience, B.S. Computer Engineering} (akm26@cornell.edu, 607-351-1334) \\
+%{\bf Geophysics Ph.D. candidate}, Earth and Atmospheric Sciences Department (EAS), Cornell University \\
+%\end{center}
+
+%{\bf \noindent Education}
+%\vspace{1pt}
+%\hrule
+%\vspace{2pt}
+
+%\begin{myindentpar}{0.5cm}
+%{\bf \noindent Ph.D. candidate - EAS, Cornell University \hfill Jan. 2011 - Present} \\
+%Expected completion date: Summer 2014 \\
+%Primary Research: Ice field contribution to sea level rise from glacier speeds and elevation change rates using satellite data \\
+
+%{\bf \noindent Teaching Assistant - EAS, Cornell University \hfill Fall 2013} \\
+%EAS 2200 - The Earth System \\
+
+%{\bf \noindent M.S. in Geological Sciences - EAS, Cornell University \hfill Jan. 2009 - Jan. 2011} \\
+%Glacier speeds and elevation change rates for the Juneau Icefield from satellite data \\
+
+%{\bf \noindent Bachelor of Science - Columbia University \hfill Aug. 2002 - May 2006} \\
+%Major in Computer Engineering, Minor in Economics \\
+
+%{\bf \noindent Course Work} includes Digital Image Processing with Remote Sensing Applications, Radar Remote Sensing, Planetary Surface Processes, Structural Geology, Geodynamics, Active Tectonics, Seismology Seminar, Inverse Methods, Machine Learning, Web Enhanced Information Management, Database Systems, Advanced Database Systems, Programming Languages and Translators, Datastructures and Algorithms, Bioinformatics \\
+
+%{\bf \noindent Software - } Python, Matlab, Java, C++, C, Linux, Windows, Mac OS X, Excel, Adobe Illustrator, ArcGIS, qGIS, ROI\_PAC, ENVI, ERDAS Imagine, Latex \\
+
+%\end{myindentpar}
+
+%{\bf \noindent Professional Experience}
+%\vspace{1pt}
+%\hrule
+%\vspace{2pt}
+
+%\begin{myindentpar}{0.5cm}
+
+%{\bf \noindent GIS Intern - Hess Corporation \hfill May 2011 - Jul. 2011} \\
+%Analyzed satellite imagery and data (e.g. Landsat, slope maps from satellite DEMs) \\
+%
+%{\bf \noindent Programmer - Lamont Doherty Earth Observatory \hfill Jun. 2006 - Jan. 2009}
+%Worked on GeoMapApp, a geospatial data visualization tool \\
+%
+%\end{myindentpar}
+%
+%{\bf \noindent Publications}
+%\vspace{1pt}
+%\hrule
+%\vspace{2pt}
+%
+%\begin{myindentpar}{0.5cm}
+%
+%\noindent {\bf Melkonian, A. K.}, M. J. Willis, M. E. Pritchard (2014), ``Satellite-Derived Volume Loss Rates and Glacier Speeds for the Juneau Icefield, Alaska''. \emph{Journal of Glaciology}. \\
+%
+%\noindent {\bf Melkonian, A. K.}, M. J. Willis, M. E. Pritchard, A. Rivera, F. Bown, S. A. Bernstein (2013), ``Satellite-Derived Volume Loss Rates and Glacier Speeds for the Cordillera Darwin Icefield, Chile'', \emph{The Cryosphere Discuss}, 6, doi:10.5194/tcd-6-3503-2012. \\
+%
+%\noindent Jay, J. A., M. Welch, M. E. Pritchard, P. J. Mares, M. E. Mnich, {\bf A. K. Melkonian}, F. Aguilera, J. A. Naranjo, J. Clavero, and M. Sunagua, ``Volcanic hotspots of the central and southern Andes as seen from space by ASTER and MODVOLC between the years 2000-2010'', \emph{Remote Sensing of Volcanoes and Volcanic Processes}. \\
+%
+%\noindent Willis, M. J., {\bf A. K. Melkonian}, M. E. Pritchard, and A. Rivera (2012), ``Ice mass loss from the Southern Patagonian Icefield, South America, between 2000 and 2012'', \emph{Geophys. Res. Lett.}, 39, doi:10.1029/2012GL053136. \\
+%
+%\noindent Willis, M. J., {\bf A. K. Melkonian}, M. E. Pritchard, and J. M. Ramage (2012), ``Ice loss rates at the Northern Patagonian Icefield derived using a decade of satellite remote sensing'', \emph{Remote Sensing of Environment}, 117, doi:10.1016/j.rse.2011.09.017. \\
+%
+%\noindent Barnhart, W. D., M. J. Willis, R. B. Lohman, {\bf A. K. Melkonian} (2011), ``InSAR and Optical Constraints on Fault Slip during the 2010-2011 New Zealand Earthquake Sequence'', \emph{Seismological Research Letters}, 82(6):800-809. doi:10.1785/gssrl.82.6.800. \\
+%
+%\noindent Ryan, W. B. F., et al. (2009), ``Global Multi-Resolution Topography synthesis'', \emph{Geochemistry Geophysics Geosystems}, 10, doi:10.1029/2008GC002332. \\
+%
+%\end{myindentpar}
+%
+%{\bf \noindent Selected Presentations}
+%\vspace{1pt}
+%\hrule
+%\vspace{2pt}
+%
+%\begin{myindentpar}{0.5cm}
+%
+%\noindent {\bf Melkonian, Andrew K.}, Michael J. Willis, Matthew E. Pritchard, Adam Stewart, Joan Ramage (2013),
+%``Surface Elevation Changes and Velocities from Remote-Sensing Data at Vil'kitskogo, Inostranzeva and Bunge Glaciers on the Novaya Zemlya (NovZ) Icefield in the Russian High Arctic'', \emph{AGU Fall Meeting 2013}, Poster. \\
+%
+%\noindent {\bf Melkonian, Andrew K.}, Michael J. Willis, Matthew E. Pritchard, Andrés Rivera (2013), 
+%``Glacier Surface Elevation Change Rates (dh/dt) from Stacked Digital Elevation Models (DEMs)'', \emph{Midwest Glacier Meeting}, Talk. \\
+%
+%\noindent {\bf Melkonian, Andrew K.}, Michael J. Willis, Matthew E. Pritchard, Andrés Rivera (2013), 
+%``Ice Loss and Glacier Speeds for the Patagonian Icefields from Satellite Remote Sensing'', \emph{SUNY ESF - Cross-disciplinary Seminar in Hydrological and Biogeochemical Processes}, Talk. \\
+%
+%\noindent {\bf Melkonian, Andrew K.}, (2012),
+%``Glacier Velocities and Elevation Change Rates (dh/dt)'', \emph{Satellite and Ice Conference, Santiago (Chile) - Office of Naval Research}, Talk. \\
+%
+%\noindent {\bf Melkonian, Andrew K.}, Julie Elliott, Michael J. Willis, Matthew E. Pritchard (2012),
+%``Volume Change Rates of Southeast Alaskan Icefields from Stacked Digital Elevation Models, 2000-2009/2010'', \emph{AGU Fall Meeting 2012}, Poster. \\
+%
+%\noindent {\bf Melkonian, Andrew K.}, Michael J. Willis, Matthew E. Pritchard, Sasha A. Bernstein (2011),
+%``Glacier Speeds and Elevation Change Rates from ASTER Satellite Data for the Juneau Icefield, Alaska'', \emph{AGU Fall Meeting 2011}, Talk. \\
+%
+%\noindent Willis, Michael J., {\bf Andrew K. Melkonian}, Matthew E. Pritchard, Joan M. Ramage (2011),
+%``Satellite Observations of Mass Changes and Glacier Motions at the Patagonian Icefields, South America'', \emph{AGU Fall Meeting 2011}, Talk. \\
+%
+%%\noindent Barnhart, William D., Michael J. Willis, Rowena B. Lohman, Andrew K. Melkonian (2011),
+%%``High-Resolution (0.5m) Optical Imagery and InSAR for Constraining Earthquake Slip: The 2010-2011 Canterbury, New Zealand Earthquakes'', \emph{AGU Fall Meeting 2011}, Poster. \\
+%
+%%\noindent Jay, Jennifer, Matthew E. Pritchard, Peter J. Mares, Marissa E. Mnich, Mark D. Welch, Andrew K. Melkonian, Felipe Aguilera, Jose Antonio Naranjo, Mayel Sunagua, Jorge E. Clavero (2011), 
+%%``Volcanic hotspots of the central and southern Andes as seen from space by ASTER and MODVOLC between the years 2000-2011'', \emph{AGU Fall Meeting 2011}, Poster. \\
+%
+%\noindent Willis, M. J., {\bf A. K. Melkonian}, M. E. Pritchard, and S. A. Bernstein (2010), ``Remote sensing of velocities and elevation changes at outlet glaciers of the Northern Patagonian Icefield, Chile'', Ice and Climate Change Conference: A View from the South, Valdivia, Chile. \\
+%
+%\noindent {\bf Melkonian, A. K.}, M. J. Willis, M. E. Pritchard, and S. A. Bernstein (2009), 
+%``Glacier velocities and elevation change of the Juneau Icefield, Alaska'', \emph{AGU Fall Meeting 2009}, Poster. \\
+%
+%\end{myindentpar}
+%
+%{\bf \noindent Press}
+%\vspace{1pt}
+%\hrule
+%\vspace{2pt}
+%
+%\begin{myindentpar}{0.5cm}
+%
+%\noindent ``Glacial thinning has sharply accelerated at major South American icefields'', 5 September 2012, \emph{AGU Release No. 12-41}, http://www.agu.org/news/press/pr\_archives/2012/2012-41.shtml. \\
+%
+%\noindent ``Patagonian ice field is melting 1.5 times faster than in prior 25 years'', 5 September 2012, \emph{Cornell Chronicle}, http://www.news.cornell.edu/stories/Sept12/IceField.html. \\
+%
+%\end{myindentpar}
+%
+%
+%{\bf \noindent Awards}
+%\vspace{1pt}
+%\hrule
+%\vspace{2pt}
+%
+%\begin{myindentpar}{0.5cm}
+%
+%\noindent Meyer Bender Memorial Scholarship - Awarded to one gradaute geology student per year for dedication to academia and the human aspects of life. \\
+%
+%\noindent 
+%
+%\end{myindentpar}
+%
+%
+
+\end{document}

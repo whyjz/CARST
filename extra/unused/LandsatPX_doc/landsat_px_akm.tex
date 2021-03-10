@@ -1,0 +1,206 @@
+\documentclass[12pt]{article}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{lineno}
+\usepackage{natbib}
+\usepackage[margin=1in]{geometry}
+
+\newenvironment{myindentpar}[1]%
+{\begin{list}{}%
+ {\setlength{\leftmargin}{#1}}%
+  \item[]%
+ }
+{\end{list}}
+
+\title{Landsat Pixel-Tracking Using ``landsatPX.py''}
+
+
+%\bibliographystyle{agufull08}
+
+\author{Andrew Kenneth Melkonian}
+\begin{document}
+
+\maketitle
+
+\vspace{1pt}
+\hrule
+\vspace{2pt}
+
+
+\noindent {\bf \underline{Description}}:
+
+Performs pixel-tracking on Landsat imagery.
+Assumes imager is already orthorectified (e.g. L1G/T product for Landsat 7, 8).
+Motion-elevation correction requires a DEM.
+
+\noindent {\bf \underline{Dependencies}}:
+
+\noindent {\bf Packages/Software:} \\
+\indent Python (including numpy, scipy, pylab, matplotlib) \\
+\indent ROI\_PAC (``ampcor'') \\
+\indent GDAL \\
+\indent GMT \\
+\indent sed \\
+\indent gawk \\
+\indent IDL/ENVI (if pre-filtering using ``gausshighpassfiltgausstretch.pro'') \\
+\indent MATLAB (if using coherency filter for post-filtering)
+
+\noindent {\bf Scripts:} \\
+\indent splitAmpcor.py \\
+\indent findOffset.py \\
+\indent getxyzs.py \\
+\indent motionElevCorrection.py (if performing motion-elevation correction, must be in the SAME directory as highResPX.py) \\
+\indent gausshighpassfiltgausstretch.pro (if pre-filtering using this script you must also have IDL/ENVI) \\
+\indent noiseremoval.m (if using coherency filter for post-filtering) \\
+\indent remloners.m (if using coherency filter for post-filtering) \\
+\indent remnoise.m (if using coherency filter for post-filtering) \\
+\indent grdread2.m (if using coherency filter for post-filtering) \\
+\indent grdwrite2.m (if using coherency filter for post-filtering) \\
+\indent NOTE: all MATLAB scripts must be in the ``MATLAB'' directory specified in the parameters file
+
+\noindent {\bf \underline{Usage:}}
+
+python landsatPX.py /path/to/landsat\_params.txt
+
+\noindent {\bf \underline{Parameters:}}
+
+/path/to/landsat\_params.txt: Path to ASCII text file defining all the necessary parameters.
+
+\noindent {\bf Example parameters file:} \\
+\noindent ::::::::::::::::::::::::::: \\
+\noindent {\bf /path/to/landsat\_params.txt} \\
+\noindent ::::::::::::::::::::::::::: \\
+UTM\_ZONE       = 7 \\
+UTM\_LETTER     = V \\
+ICE             = /home/user/Region\_utm7v\_ice.gmt \\
+ROCK            = /home/user/Region\_utm7v\_rock.gmt \\
+METADATA\_DIR   = /home/user/Landsat8/Images \\
+PAIRS\_DIR      = /home/user/Landsat8/Pairs \\
+PROCESSORS      = 4 \\
+RESOLUTION      = 15 \\
+SNR\_CUTOFF     = 0 \\
+DEM\_GRD        = /home/user/DEMs/DEM\_utm7v.grd \\
+PREFILTER       = False \\
+REF\_X          = 32 \\
+REF\_Y          = 32 \\
+SEARCH\_X       = 32 \\
+SEARCH\_Y       = 32 \\
+STEP            = 8 \\
+M\_SCRIPTS\_DIR = /home/user/MATLAB/scripts \\
+VEL\_MAX        = 10 \\
+TOL             = 0.2 \\
+NUMDIF          = 3 \\
+SCALE           = 1500000 \\
+PAIRS           = /home/user/Landsat8/Pairs/landsat8\_pairs.txt \\
+
+\noindent {\bf Parameter descriptions:}
+
+\noindent {\bf UTM\_ZONE:} Number of UTM zone to use (imagery will be reprojected to this zone if not already projected in it)
+
+\noindent {\bf UTM\_LETTER:} Letter of UTM zone (for use by GMT scripts)
+
+\noindent {\bf ICE:} Path to GMT polygon file containing glacier outlines projected in UTM\_ZONE.
+Outlines for many regions available via Global Land Ice Measurements from Space (GLIMS, www.glims.org).
+
+\noindent {\bf ROCK:} Path to GMT polygon file containing internal rock outlines projected in UTM\_ZONE.
+
+\noindent {\bf METADATA\_DIR:} Directory containing metadata, metadata files MUST have the same identifier as image files
+e.g. if image file is LC81760062014211LGN00\_B8.TIF, metadata file MUST be LC81760062014211LGN00\_MTL.txt
+
+\noindent {\bf PAIRS\_DIR:} Directory where all file created by this script will be written.
+A separate directory will be created for each pair, with the following format: YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS
+The first date/time-stamp corresponds to the later image in the pair, the second to the earlier image
+DO NOT MODIFY the pair directory names created by the script if you expect the script to work
+
+\noindent {\bf PROCESSORS:} Number of processors to use when running ``ampcor"
+To find the number of ``processors'' available on your machine (if you are using linux), enter the command ``top'' then type the number ``1"
+NOTE: You can enter any number here, but if that number is higher than the number of ``processors'' available on your machine you will not see a performance increase.
+
+\noindent {\bf RESOLUTION:} Resolution of the input imagery in meters (e.g. ``15'' for band 8 of Landsat 7 and 8).
+
+\noindent {\bf SNR\_CUTOFF:} Signal-to-noise ratio threshold, *\_filt.grd velocity grids created by the script during post-processing will be clipped so that all pixels
+with an SNR below this threshold are masked out.
+
+\noindent {\bf DEM\_GRD:} Path to NetCDF grid file of elevations projected in UTM\_ZONE.
+MAKE SURE this covers the maximum extent of the imagery if you plan on using motion-elevation corrected results.
+Motion-elevation correction cannot be performed where the elevation is unknown.
+
+\noindent {\bf PREFILTER:} Set to True if you are using IDLDE to perform gaussian high-pass filtering using the gausshighpassgausstretch.pro script.
+If you set this to ``True'' DO NOT modify the file names created by the *.pro script, let landsatPX.py deal with it.
+NOTE: This is often not necessary for Landsat 7 and 8.
+
+\noindent {\bf REF\_X:} Reference window size in pixels for the longitude/width/columns/samples direction.
+NOTE: 32 has proved successful, but you may wish to modify, e.g. a smaller window for smaller glaciers/faster processing.
+
+\noindent {\bf REF\_Y:} Reference window size in pixels for the latitude/length/rows/lines direction.
+NOTE: 32 has proved successful, but you may wish to modify, e.g. a smaller window for smaller glaciers/faster processing.
+
+\noindent {\bf SEARCH\_X:} Search window size in pixels for the longitude/width/columns/samples direction.
+Set this so that it is twice the maximum offset (maximum velocity multiplied by time interval, then divided by RESOLUTION).
+
+\noindent {\bf SEARCH\_Y:} Search window size in pixels for the latitude/length/rows/lines direction.
+Set this so that it is twice the maximum offset (maximum velocity multiplied by time interval, then divided by RESOLUTION).
+
+\noindent {\bf STEP:} Pixel-tracking is performed every STEP pixels.
+The smaller this number, the higher resolution the velocity results will be and the longer ``ampcor'' will take to run.
+
+\noindent {\bf M\_SCRIPTS\_DIR:} Directory containing the Matlab scripts ``noiseremoval.m", ``remloners.m", ``remnoise.m", ``grdread2.m", ``grdwrite2.m"
+NOTE: This is not necessary for processing.
+
+\noindent {\bf VEL\_MAX:} Maximum velocity threshold (in m/day) for use by ``noiseremoval.m".
+Velocities above this value will be clipped for *\_filt.grd files.
+Lower values filter out MORE, higher values filter out LESS.
+NOTE: This applies to E-W and N-S velocities, NOT to overall speed.
+
+\noindent {\bf TOL:} Adjacent pixels whose velocity is within TOL*VEL\_MAX are considered  ``similar'' pixels.
+For example, if TOL is 0.2 and VEL\_MAX is 10, pixels that are with 2 m/day of each other are considered ``similar".
+Lower values filter out MORE, higher values filter out LESS.
+This is used in conjunction with NUMDIF (see below).
+
+\noindent {\bf NUMDIF:} The minimum number of ``similar'' pixels that must ``adjacent'' to the pixel being considered.
+If less than this number of ``similar'' adjacent pixels are found, the pixel will be filtered out of the *\_filt.grd velocity results.
+Lower values filter out LESS, higher values filter out MORE.
+
+\noindent {\bf SCALE:} Scale to be used by GMT when plotting results, 1500000 often works for an entire Landsat 8 image.
+
+\noindent {\bf PAIRS:} Path to two-column ASCII text file listing image pair paths.
+Each row corresponds to an image pair, containing two entries that are paths to each image in the pair.
+
+\noindent {\bf \underline{Output:}}
+
+A directory will be created in the ``PAIRS\_DIR'' directory for each valid pair given in the ``PAIRS'' file with the following format: \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS} \\
+The first date/time-stamp corresponds to the later image in the pair, the second to the earlier image.
+DO NOT MODIFY the pair directory names created by the script or the filenames created by this script if you expect the script to work.
+
+\noindent The following results will be created in these directories if the script runs sucessfully: \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_eastxyz.txt:} UTM Easting, UTM Northing, E-W offset in meters, SNR (space-delimited) \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_northxyz.txt:} UTM Easting, UTM Northing, N-S offset in meters, SNR (space-delimited) \\
+\indent These are 4-column ASCII text files containing the E-W and N-S OFFSETS in METERS (NOT velocities).
+The first column is longitude (UTM easting), the second is latitude (UTM northing), the third is offset in meters, the fourth is signal-to-noise ratio.
+
+\noindent Unfiltered NetCDF grid files containing VELOCITIES in METERS PER DAY will be created from the ASCII text files: \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_eastxyz.grd:} E-W velocities (NOTE: MAY NEED TO MULTIPLY BY -1) \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_northxyz.grd:} N-S velocities \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_mag.grd:} Speeds from E-W and N-S velocities \\
+\noindent A NetCDF grid file containing the SNRs will be created as well:
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_snrxyz.grd:} SNRs \\
+\noindent An image of the speeds will be created, as well as a file containing the GMT commands used to create the image (if you'd like to modify it to create your own image): \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_mag.pdf:} PDF image of speeds \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_image.gmt:} GMT commands used to create ``YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_mag.pdf''
+
+\noindent If filtering scripts are present, filtered files will be created corresponding to each of the unfiltered files: \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_eastxyz\_filt.grd:} Filtered E-W velocities \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_northxyz\_filt.grd:} Filtered N-S velocities \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_mag\_filt.grd:} Speeds from filtered E-W and N-S velocities \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_mag\_filt.pdf:} PDF image of filtered speeds \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_image\_filt.gmt:} GMT commands used to create ``YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_mag\_filt.pdf''
+
+\noindent If a DEM is specified, motion-elevation corrected files will be created from either the filtered (if present) or unfiltered velocities: \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_eastxyz*\_corrected.grd:} Filtered E-W velocities \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_northxyz*\_corrected.grd:} Filtered N-S velocities \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_mag*\_corrected.grd:} Speeds from filtered E-W and N-S velocities \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_mag*\_corrected.pdf:} PDF image of filtered speeds \\
+\indent {\bf YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_*\_image*\_corrected.gmt:} GMT commands used to create ``YYYYMMDDHHMMSS\_YYYYMMDDHHMMSS\_mag\_filt.pdf'' \\
+
+\end{document}
