@@ -408,9 +408,9 @@ class SingleRaster:
 		according to
 		https://gis.stackexchange.com/questions/260304/extract-raster-values-within-shapefile-with-pygeoprocessing-or-gdal
 		"""
-		from rasterio import logging
-		log = logging.getLogger()
-		log.setLevel(logging.ERROR)
+		# from rasterio import logging
+		# log = logging.getLogger()
+		# log.setLevel(logging.ERROR)
 
 		import rasterio
 		from rasterio.mask import mask
