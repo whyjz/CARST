@@ -23,6 +23,13 @@
 #
 # complete readme is at CARST/Doc/pixeltrack/README.rst
 
+# === dealing with issues described at https://github.com/isce-framework/isce2/issues/258 ===
+import logging
+import isce
+root_logger = logging.getLogger()
+root_logger.setLevel('WARNING')
+# ===========================================================================================
+
 from argparse import ArgumentParser
 import sys
 import os
