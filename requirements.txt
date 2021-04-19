@@ -4,3 +4,4 @@ shapely
 rasterio
 geopandas
 matplotlib
+scikit-image

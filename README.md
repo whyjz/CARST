@@ -16,6 +16,7 @@ Required packages:
 - rasterio
 - geopandas
 - matplotlib
+- scikit-image
 
 Optional package:
 - ISCE >= 2.0.0 (built with your python, required for feature tracking)
