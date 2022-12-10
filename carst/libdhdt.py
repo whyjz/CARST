@@ -8,7 +8,10 @@ import numpy as np
 from numpy.linalg import inv
 import os
 import sys
-import gdal
+try:
+	import gdal
+except:
+	from osgeo import gdal        # sometimes gdal is part of osgeo modules
 from datetime import datetime
 from shapely.geometry import Polygon
 from scipy.interpolate import interp2d
