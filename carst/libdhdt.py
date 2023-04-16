@@ -301,8 +301,9 @@ class PixelTimeSeries(object):
     Column 2: value
     Column 3: uncertainty
     """
-    def __init__(self, data=np.ndarray([0, 3])):
-        data = np.array(data) if type(data) is not np.ndarray else data
+    def __init__(self, data=[]):
+        data = np.ndarray([0, 3]) if not data else data                      # [] --> np.ndarray([0, 3])
+        data = np.array(data) if type(data) is not np.ndarray else data      # [1, 2, 3] --> np.array([1, 2, 3])
         self.verify_record(data)
         self.data = data
 
@@ -341,173 +342,189 @@ class PixelTimeSeries(object):
 
 class DemPile(object):
 
-	"""
-	New class in replace of TimeSeriesDEM. It doesn't use nparray for avoiding huge memory consumption.
-	Instead, it uses a novel method for stacking all DEMs and saves them as a dict array (which is what 
-	is stored in the intermediate pickle file. 
-	"""
+    """
+    New class in replace of TimeSeriesDEM. It doesn't use nparray for avoiding huge memory consumption.
+    Instead, it uses a novel method for stacking all DEMs and saves them as a dict array (which is what 
+    is stored in the intermediate pickle file. 
+    """
 
-	def __init__(self, picklepath=None, refgeo=None, refdate=None, dhdtprefix=None):
-		self.picklepath = picklepath
-		self.dhdtprefix = dhdtprefix
-		self.ts = None
-		self.dems = []
-		self.refdate = None
-		if refdate is not None:
-			self.refdate = datetime.strptime(refdate, '%Y-%m-%d')
-		self.refgeo = refgeo
-		self.refgeomask = None
-		if refgeo is not None:
-			self.refgeomask = refgeo.ReadAsArray().astype(bool)
-		self.fitdata = {'slope': [], 'slope_err': [], 'residual': [], 'count': []}
-		self.maskparam = {'max_uncertainty': 9999, 'min_time_span': 0}
-		self.evmd_threshold = 6
+    def __init__(self, picklepath=None, refgeo=None, refdate=None, dhdtprefix=None):
+        self.picklepath = picklepath
+        self.dhdtprefix = dhdtprefix
+        self.ts = None
+        self.dems = []
+        self.refdate = None
+        if refdate is not None:
+            self.refdate = datetime.strptime(refdate, '%Y-%m-%d')
+        self.refgeo = refgeo
+        self.refgeomask = None
+        if refgeo is not None:
+            self.refgeomask = refgeo.ReadAsArray().astype(bool)
+        self.fitdata = {'slope': [], 'slope_err': [], 'residual': [], 'count': []}
+        self.maskparam = {'max_uncertainty': 9999, 'min_time_span': 0}
+        self.evmd_threshold = 6
 
-	def AddDEM(self, dems):
-		# ==== Add DEM object list ====
-		if type(dems) is list:
-			self.dems = self.dems + dems
-		elif type(dems) is SingleRaster:
-			self.dems.append(dems)
-		else:
-			raise ValueError("This DEM type is neither a SingleRaster object nor a list of SingleRaster objects.")
+    def AddDEM(self, dems):
+        # ==== Add DEM object list ====
+        if type(dems) is list:
+            self.dems = self.dems + dems
+        elif type(dems) is SingleRaster:
+            self.dems.append(dems)
+        else:
+            raise ValueError("This DEM type is neither a SingleRaster object nor a list of SingleRaster objects.")
 
-	def SortByDate(self):
-		# ==== sort DEMs by date (ascending order) ====
-		dem_dates = [i.date for i in self.dems]
-		dateidx = np.argsort(dem_dates)
-		self.dems = [self.dems[i] for i in dateidx]
+    def SortByDate(self):
+        # ==== sort DEMs by date (ascending order) ====
+        dem_dates = [i.date for i in self.dems]
+        dateidx = np.argsort(dem_dates)
+        self.dems = [self.dems[i] for i in dateidx]
 
-	def SetRefGeo(self, refgeo):
-		# ==== Prepare the reference geometry ====
-		if type(refgeo) is str:
-			self.refgeo = SingleRaster(refgeo)
-		elif type(refgeo) is SingleRaster:
-			self.refgeo = refgeo
-		else:
-			raise ValueError("This refgeo must be either a SingleRaster object or a path to a geotiff file.")
-		self.refgeomask = self.refgeo.ReadAsArray().astype(bool)
+    def SetRefGeo(self, refgeo):
+        # ==== Prepare the reference geometry ====
+        if type(refgeo) is str:
+            self.refgeo = SingleRaster(refgeo)
+        elif type(refgeo) is SingleRaster:
+            self.refgeo = refgeo
+        else:
+            raise ValueError("This refgeo must be either a SingleRaster object or a path to a geotiff file.")
+        self.refgeomask = self.refgeo.ReadAsArray().astype(bool)
 
-	def SetRefDate(self, datestr):
-		self.refdate = datetime.strptime(datestr, '%Y-%m-%d')
+    def SetRefDate(self, datestr):
+        self.refdate = datetime.strptime(datestr, '%Y-%m-%d')
 
-	def SetMaskParam(self, ini):
-		if 'max_uncertainty' in ini.settings:
-			self.maskparam['max_uncertainty'] = float(ini.settings['max_uncertainty'])
-		if 'min_time_span' in ini.settings:
-			self.maskparam['min_time_span'] = float(ini.settings['min_time_span'])
+    def SetMaskParam(self, ini):
+        if 'max_uncertainty' in ini.settings:
+            self.maskparam['max_uncertainty'] = float(ini.settings['max_uncertainty'])
+        if 'min_time_span' in ini.settings:
+            self.maskparam['min_time_span'] = float(ini.settings['min_time_span'])
 
-	def SetEVMDThreshold(self, ini):
-		if 'evmd_threshold' in ini.regression:
-			self.evmd_threshold = float(ini.regression['evmd_threshold'])
+    def SetEVMDThreshold(self, ini):
+        if 'evmd_threshold' in ini.regression:
+            self.evmd_threshold = float(ini.regression['evmd_threshold'])
 
-	def InitTS(self):
-		# ==== Prepare the reference geometry ====
-		refgeo_Ysize = self.refgeo.GetRasterYSize()
-		refgeo_Xsize = self.refgeo.GetRasterXSize()
-		self.ts = [[{'date': [], 'uncertainty': [], 'value': []} for i in range(refgeo_Xsize)] for j in range(refgeo_Ysize)]
-		print('total number of pixels to be processed: {}'.format(np.sum(self.refgeomask)))
+    def InitTS(self):
+        # ==== Prepare the reference geometry ====
+        refgeo_Ysize = self.refgeo.GetRasterYSize()
+        refgeo_Xsize = self.refgeo.GetRasterXSize()
+        self.ts = np.empty([refgeo_Ysize, refgeo_Xsize], dtype=object)
+        # for j in range(self.ts.shape[0]):
+        #     for i in range(self.ts.shape[1]):
+        #         self.ts[j, i] = PixelTimeSeries()
+        # self.ts = [[{'date': [], 'uncertainty': [], 'value': []} for i in range(refgeo_Xsize)] for j in range(refgeo_Ysize)]
+        # self.ts = [[ [] for i in range(refgeo_Xsize)] for j in range(refgeo_Ysize)]
+        print('total number of pixels to be processed: {}'.format(np.sum(self.refgeomask)))
 
-	def ReadConfig(self, ini):
-		self.picklepath = ini.result['picklefile']
-		self.dhdtprefix = ini.result['dhdt_prefix']
-		self.AddDEM(ini.GetDEM())
-		self.SortByDate()
-		self.SetRefGeo(ini.refgeometry['gtiff'])
-		self.SetRefDate(ini.settings['refdate'])
-		self.SetMaskParam(ini)
-		self.SetEVMDThreshold(ini)
+    def ReadConfig(self, ini):
+        self.picklepath = ini.result['picklefile']
+        self.dhdtprefix = ini.result['dhdt_prefix']
+        self.AddDEM(ini.GetDEM())
+        self.SortByDate()
+        self.SetRefGeo(ini.refgeometry['gtiff'])
+        self.SetRefDate(ini.settings['refdate'])
+        self.SetMaskParam(ini)
+        self.SetEVMDThreshold(ini)
 
-	@timeit
-	def PileUp(self):
-		# ==== Start to read every DEM and save it to our final array ====
-		for i in range(len(self.dems)):
-			print('{}) {}'.format(i + 1, os.path.basename(self.dems[i].fpath) ))
-			if self.dems[i].uncertainty <= self.maskparam['max_uncertainty']:
-				datedelta = self.dems[i].date - self.refdate
-				# znew = Resample_Array(self.dems[i], self.refgeo, resamp_method='linear')
-				znew = Resample_Array2(self.dems[i], self.refgeo)
-				znew_mask = np.logical_and(znew > 0, self.refgeomask)
-				fill_idx = np.where(znew_mask)
-				for m,n in zip(fill_idx[0], fill_idx[1]):
-					self.ts[m][n]['date'] += [datedelta.days]
-					self.ts[m][n]['uncertainty'] += [self.dems[i].uncertainty]
-					self.ts[m][n]['value'] += [znew[m, n]]
-			else:
-				print("This one won't be piled up because its uncertainty ({}) exceeds the maximum uncertainty allowed ({}).".format(self.dems[i].uncertainty, self.maskparam['max_uncertainty']))
+    @timeit
+    def PileUp(self):
+        # ==== Start to read every DEM and save it to our final array ====
+        ts = [[ [] for n in range(self.ts.shape[1])] for m in range(self.ts.shape[0])]
+        for i in range(len(self.dems)):
+            print('{}) {}'.format(i + 1, os.path.basename(self.dems[i].fpath) ))
+            if self.dems[i].uncertainty <= self.maskparam['max_uncertainty']:
+                datedelta = self.dems[i].date - self.refdate
+                # znew = Resample_Array(self.dems[i], self.refgeo, resamp_method='linear')
+                znew = Resample_Array2(self.dems[i], self.refgeo)
+                znew_mask = np.logical_and(znew > 0, self.refgeomask)
+                fill_idx = np.where(znew_mask)
+                for m,n in zip(fill_idx[0], fill_idx[1]):
+                    record = [datedelta.days, znew[m, n], self.dems[i].uncertainty]
+                    # self.ts[m, n].add_record(record)
+                    ts[m][n] += [record]
+                    # self.ts[m][n]['date'] += [datedelta.days]
+                    # self.ts[m][n]['uncertainty'] += [self.dems[i].uncertainty]
+                    # self.ts[m][n]['value'] += [znew[m, n]]
+            else:
+                print("This one won't be piled up because its uncertainty ({}) exceeds the maximum uncertainty allowed ({})."
+                      .format(self.dems[i].uncertainty, self.maskparam['max_uncertainty']))
+                
+        # After the content of ts is all populated, we move the data to self.ts as an array of PixelTimeSeries.
+        for m in range(self.ts.shape[0]):
+            for n in range(self.ts.shape[1]):
+                self.ts[m, n] = PixelTimeSeries(ts[m][n])
+                
+    def DumpPickle(self):
+        pickle.dump(self.ts, open(self.picklepath, "wb"))
 
-	def DumpPickle(self):
-		pickle.dump(self.ts, open(self.picklepath, "wb"))
+    def LoadPickle(self):
+        self.ts = pickle.load( open(self.picklepath, "rb") )
 
-	def LoadPickle(self):
-		self.ts = pickle.load( open(self.picklepath, "rb") )
+    @timeit
+    def Polyfit(self):
+        # ==== Create final array ====
+        self.fitdata['slope']     = np.ones_like(self.ts, dtype=float) * -9999
+        self.fitdata['slope_err'] = np.ones_like(self.ts, dtype=float) * -9999
+        self.fitdata['residual']  = np.ones_like(self.ts, dtype=float) * -9999
+        self.fitdata['count']     = np.ones_like(self.ts, dtype=float) * -9999
+        # ==== Weighted regression ====
+        print('m total: ', len(self.ts))
+        for m in range(len(self.ts)):
+            if m % 100 == 0:
+                print(m)
+            for n in range(len(self.ts[0])):
+                # self.fitdata['count'][m, n] = len(self.ts[m][n]['date'])
+                # if len(self.ts[m][n]['date']) >= 3:
+                date = self.ts[m, n].get_date()
+                # date = np.array(self.ts[m][n]['date'])
+                uncertainty = self.ts[m, n].get_uncertainty()
+                # uncertainty = np.array(self.ts[m][n]['uncertainty'])
+                value = self.ts[m, n].get_value()
+                # value = np.array(self.ts[m][n]['value'])
+                # pin_value = pin_dem_array[m ,n]
+                # pin_date = pin_dem_date_array[m, n]
+                # date, uncertainty, value = filter_by_slope(date, uncertainty, value, pin_date, pin_value)
+                # date, uncertainty, value = filter_by_redundancy(date, uncertainty, value)
 
-	@timeit
-	def Polyfit(self):
-		# ==== Create final array ====
-		self.fitdata['slope']     = np.ones_like(self.ts, dtype=float) * -9999
-		self.fitdata['slope_err'] = np.ones_like(self.ts, dtype=float) * -9999
-		self.fitdata['residual']  = np.ones_like(self.ts, dtype=float) * -9999
-		self.fitdata['count']     = np.ones_like(self.ts, dtype=float) * -9999
-		# ==== Weighted regression ====
-		print('m total: ', len(self.ts))
-		for m in range(len(self.ts)):
-			# if m < 600:
-			# 	continue
-			if m % 100 == 0:
-				print(m)
-			for n in range(len(self.ts[0])):
-				# self.fitdata['count'][m, n] = len(self.ts[m][n]['date'])
-				# if len(self.ts[m][n]['date']) >= 3:
-				date = np.array(self.ts[m][n]['date'])
-				uncertainty = np.array(self.ts[m][n]['uncertainty'])
-				value = np.array(self.ts[m][n]['value'])
-				# pin_value = pin_dem_array[m ,n]
-				# pin_date = pin_dem_date_array[m, n]
-				# date, uncertainty, value = filter_by_slope(date, uncertainty, value, pin_date, pin_value)
-				# date, uncertainty, value = filter_by_redundancy(date, uncertainty, value)
+                # slope_ref = [(value[i] - pin_value) / float(date[i] - pin_date) * 365.25 for i in range(len(value))]
+                # for i in reversed(range(len(slope_ref))):
+                #    if (slope_ref[i] > dhdt_limit_upper) or (slope_ref[i] < dhdt_limit_lower):
+                #        _ = date.pop(i)
+                #        _ = uncertainty.pop(i)
+                #        _ = value.pop(i)
+                # self.fitdata['count'][m, n] = len(date)
 
-				# slope_ref = [(value[i] - pin_value) / float(date[i] - pin_date) * 365.25 for i in range(len(value))]
-				# for i in reversed(range(len(slope_ref))):
-				# 	if (slope_ref[i] > dhdt_limit_upper) or (slope_ref[i] < dhdt_limit_lower):
-				# 		_ = date.pop(i)
-				# 		_ = uncertainty.pop(i)
-				# 		_ = value.pop(i)
-				# self.fitdata['count'][m, n] = len(date)
+                # Whyjay: May 10, 2018: cancelled the min date span (date[-1] - date[0] > 0), previously > 200
+                # if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 0):
+                if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
+                    slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty, self.evmd_threshold)
+                    # if residual > 100:
+                    #    print(date, value, uncertainty)
+                    self.fitdata['slope'][m, n] = slope
+                    self.fitdata['slope_err'][m, n] = slope_err
+                    self.fitdata['residual'][m, n] = residual
+                    self.fitdata['count'][m, n] = count
+                # else:
+                    # self.fitdata['count'] = len(ref_dem_TS[m][n]['date'])
+                    # elif (date[-1] - date[0] > 0):
+                    #    slope_arr[m, n] = (value[1] - value[0]) / float(date[1] - date[0]) * 365.25
+        # self.fitdata['count'][~self.refgeomask] = -9999
 
-				# Whyjay: May 10, 2018: cancelled the min date span (date[-1] - date[0] > 0), previously > 200
-				# if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 0):
-				if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
-					slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty, self.evmd_threshold)
-					# if residual > 100:
-					# 	print(date, value, uncertainty)
-					self.fitdata['slope'][m, n] = slope
-					self.fitdata['slope_err'][m, n] = slope_err
-					self.fitdata['residual'][m, n] = residual
-					self.fitdata['count'][m, n] = count
-				# else:
-					# self.fitdata['count'] = len(ref_dem_TS[m][n]['date'])
-					# elif (date[-1] - date[0] > 0):
-					# 	slope_arr[m, n] = (value[1] - value[0]) / float(date[1] - date[0]) * 365.25
-		# self.fitdata['count'][~self.refgeomask] = -9999
+    def Fitdata2File(self):
+        # ==== Write to file ====
+        dhdt_dem = SingleRaster(self.dhdtprefix + '_dhdt.tif')
+        dhdt_error = SingleRaster(self.dhdtprefix + '_dhdt_error.tif')
+        dhdt_res = SingleRaster(self.dhdtprefix + '_dhdt_residual.tif')
+        dhdt_count = SingleRaster(self.dhdtprefix + '_dhdt_count.tif')
+        dhdt_dem.Array2Raster(self.fitdata['slope'], self.refgeo)
+        dhdt_error.Array2Raster(self.fitdata['slope_err'], self.refgeo)
+        dhdt_res.Array2Raster(self.fitdata['residual'], self.refgeo)
+        dhdt_count.Array2Raster(self.fitdata['count'], self.refgeo)
 
-	def Fitdata2File(self):
-		# ==== Write to file ====
-		dhdt_dem = SingleRaster(self.dhdtprefix + '_dhdt.tif')
-		dhdt_error = SingleRaster(self.dhdtprefix + '_dhdt_error.tif')
-		dhdt_res = SingleRaster(self.dhdtprefix + '_dhdt_residual.tif')
-		dhdt_count = SingleRaster(self.dhdtprefix + '_dhdt_count.tif')
-		dhdt_dem.Array2Raster(self.fitdata['slope'], self.refgeo)
-		dhdt_error.Array2Raster(self.fitdata['slope_err'], self.refgeo)
-		dhdt_res.Array2Raster(self.fitdata['residual'], self.refgeo)
-		dhdt_count.Array2Raster(self.fitdata['count'], self.refgeo)
-
-	def ShowDhdtTifs(self):
-		dhdt_dem = SingleRaster(self.dhdtprefix + '_dhdt.tif')
-		dhdt_error = SingleRaster(self.dhdtprefix + '_dhdt_error.tif')
-		dhdt_res = SingleRaster(self.dhdtprefix + '_dhdt_residual.tif')
-		dhdt_count = SingleRaster(self.dhdtprefix + '_dhdt_count.tif')
-		return dhdt_dem, dhdt_error, dhdt_res, dhdt_count
+    def ShowDhdtTifs(self):
+        dhdt_dem = SingleRaster(self.dhdtprefix + '_dhdt.tif')
+        dhdt_error = SingleRaster(self.dhdtprefix + '_dhdt_error.tif')
+        dhdt_res = SingleRaster(self.dhdtprefix + '_dhdt_residual.tif')
+        dhdt_count = SingleRaster(self.dhdtprefix + '_dhdt_count.tif')
+        return dhdt_dem, dhdt_error, dhdt_res, dhdt_count
 
 
 

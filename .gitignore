@@ -37,3 +37,4 @@ examples/dhdt/Demo_DEMs/refgeo_10m_TSpickle.p
 examples/dhdt/tmp.tif
 other_process/log_getUncertaintyDEM_grdtrack_output.xyz
 Utilities/unused/PXData/*
+*.p
