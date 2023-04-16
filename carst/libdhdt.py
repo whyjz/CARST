@@ -2,22 +2,23 @@
 # Func: Resample_Array(UtilRaster.SingleRaster, UtilRaster.SingleRaster)
 # used for dhdt
 # by Whyjay Zheng, Jul 27 2016
-# last edit: Jun 22 2017
+# last edit: Apr 17 2023
 
 import numpy as np
 from numpy.linalg import inv
 import os
 import sys
 try:
-	import gdal
+    import gdal
 except:
-	from osgeo import gdal        # sometimes gdal is part of osgeo modules
+    from osgeo import gdal        # sometimes gdal is part of osgeo modules
 from datetime import datetime
 from shapely.geometry import Polygon
 from scipy.interpolate import interp2d
 from scipy.interpolate import NearestNDInterpolator
 from scipy.interpolate import griddata
 import gc
+from carst import ConfParams
 from carst.libraster import SingleRaster
 import pickle
 import matplotlib.pyplot as plt
@@ -257,41 +258,10 @@ def wlr_corefun(x, y, ye, evmd_threshold=6, detailed=False):
 	# 	residual = np.sum((np.polyval(p, x[:-2]) - y[:-2]) ** 2)
 	# return slope, slope_err, residual
 
-def onclick_wrapper(data, fig, ax):
-	def onclick(event):
-	    print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
-	          ('double' if event.dblclick else 'single', event.button,
-	           event.x, event.y, event.xdata, event.ydata))
-	    col = int(event.xdata)
-	    row = int(event.ydata)
-	    xx = np.array(data[row][col]['date'])
-	    yy = np.array(data[row][col]['value'])
-	    ye = np.array(data[row][col]['uncertainty'])
-	    slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=80, detailed=True)
-	    SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
-	    SSRes = np.sum((y_good - y_goodest) ** 2)
-	    SST = np.sum((y_good - np.mean(y_good)) ** 2)
-	    Rsquared = 1 - SSRes / SST
-	    ax.plot(event.xdata, event.ydata, '.', markersize=10, markeredgewidth=1, markeredgecolor='k', color='xkcd:green')
-	    fig.canvas.draw()
-	    figi = plt.figure()
-	    axi = plt.gca()
-	    axi.errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='ko')
-	    np.set_printoptions(precision=3)
-	    np.set_printoptions(suppress=True)
-	    xye = np.vstack((xx,yy,ye)).T
-	    print(xye[xye[:,1].argsort()])
-	    # print(xx)
-	    # print(yy)
-	    # print(ye)
-	    axi.plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
-	    axi.plot(x_good, y_good, '.', color='r', markersize=8, zorder=30)
-	    axi.text(0.1, 0.1, 'R^2 = {:.4f}'.format(Rsquared), transform=ax.transAxes)
-	    axi.set_xlabel('days, from 2015-01-01')
-	    axi.set_ylabel('height (m)')
-	    # plt.plot(xx, yy)
-	    figi.show()
-	return onclick
+
+
+
+
 
 class PixelTimeSeries(object):
     """
@@ -415,6 +385,10 @@ class DemPile(object):
         print('total number of pixels to be processed: {}'.format(np.sum(self.refgeomask)))
 
     def ReadConfig(self, ini):
+        if type(ini) is str:
+            ini = ConfParams(ini)
+            ini.ReadParam()
+            ini.VerifyParam()
         self.picklepath = ini.result['picklefile']
         self.dhdtprefix = ini.result['dhdt_prefix']
         self.AddDEM(ini.GetDEM())
@@ -525,6 +499,58 @@ class DemPile(object):
         dhdt_res = SingleRaster(self.dhdtprefix + '_dhdt_residual.tif')
         dhdt_count = SingleRaster(self.dhdtprefix + '_dhdt_count.tif')
         return dhdt_dem, dhdt_error, dhdt_res, dhdt_count
+    
+    def viz(self):
+        dhdt_raster, _, _, _ = self.ShowDhdtTifs()
+        img = dhdt_raster.ReadAsArray()
+        img[img < -9000] = np.nan   # might need to change
+        
+        fig, axs = plt.subplots(2, 1, figsize=(8,8))                   # figsize might need to change
+        first_img = axs[0].imshow(img, cmap='RdBu', vmin=-6, vmax=6)   # minmax might need to change
+        
+        onclick = onclick_wrapper(self.ts, axs)
+        cid = fig.canvas.mpl_connect('button_press_event', onclick)
+    
+def onclick_wrapper(data, axs):
+    def onclick_ipynb(event):
+        """
+        Callback function for mouse click
+        """
+        print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+          ('double' if event.dblclick else 'single', event.button,
+           event.x, event.y, event.xdata, event.ydata))
+        col = int(event.xdata)
+        row = int(event.ydata)
+        xx = data[row, col].get_date()
+        yy = data[row, col].get_value()
+        ye = data[row, col].get_uncertainty()
+        slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=80, detailed=True)
+        SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
+        SSRes = np.sum((y_good - y_goodest) ** 2)
+        SST = np.sum((y_good - np.mean(y_good)) ** 2)
+        Rsquared = 1 - SSRes / SST
+        axs[0].plot(event.xdata, event.ydata, '.', markersize=10, markeredgewidth=1, markeredgecolor='k', color='xkcd:green')
+        axs[1].cla()
+        axs[1].errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='ko')
+        np.set_printoptions(precision=3)
+        np.set_printoptions(suppress=True)
+        xye = np.vstack((xx,yy,ye)).T
+        print(xye[xye[:,1].argsort()])
+        axs[1].plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
+        axs[1].plot(x_good, y_good, '.', color='r', markersize=8, zorder=30)
+        axs[1].text(0.1, 0.1, 'R^2 = {:.4f}'.format(Rsquared), transform=ax.transAxes)
+        axs[1].set_xlabel('days, from xxxx-01-01')
+        axs[1].set_ylabel('height (m)')
+    return onclick_ipynb
+
+
+# fig, ax = plt.subplots()
+# img[img < -9000] = np.nan
+# ax.imshow(img, cmap='RdBu', vmin=-6, vmax=6)
+# onclick = onclick_wrapper(data, fig, ax)
+
+# cid = fig.canvas.mpl_connect('button_press_event', onclick)
+# cid = fig.canvas.mpl_connect('button_press_event', onclick2)
 
 
 
