@@ -408,9 +408,9 @@ class SingleRaster:
 		according to
 		https://gis.stackexchange.com/questions/260304/extract-raster-values-within-shapefile-with-pygeoprocessing-or-gdal
 		"""
-		from rasterio import logging
-		log = logging.getLogger()
-		log.setLevel(logging.ERROR)
+		# from rasterio import logging
+		# log = logging.getLogger()
+		# log.setLevel(logging.ERROR)
 
 		import rasterio
 		from rasterio.mask import mask
@@ -457,7 +457,11 @@ class SingleRaster:
 			data[data == 0] = np.nan    # LS-8 case
 		lowpass = gaussian_filter(data, sigma, truncate=truncate)
 		highpass = data - lowpass
-		hp_raster_path = self.fpath.rsplit('.', 1)[0] + '_GHP-' + str(sigma) + 'sig.tif'
+		if self.fpath.startswith('http://') or self.fpath.startswith('https://'):
+			tmp = os.path.basename(self.fpath)
+			hp_raster_path = tmp.rsplit('.', 1)[0] + '_GHP-' + str(sigma) + 'sig.tif'
+		else:
+			hp_raster_path = self.fpath.rsplit('.', 1)[0] + '_GHP-' + str(sigma) + 'sig.tif'
 		hp_raster = SingleRaster(hp_raster_path)
 		hp_raster.Array2Raster(highpass, self)
 		self.SetPath(hp_raster_path)
@@ -483,7 +487,11 @@ class SingleRaster:
 		ww[ww == 0] = np.finfo(float).eps
 		lowpass = vv / ww
 		lowpass[nodata_pos] = self.GetNoDataValue()
-		lp_raster_path = self.fpath.rsplit('.', 1)[0] + '_GLP-' + str(sigma) + 'sig.tif'
+		if self.fpath.startswith('http://') or self.fpath.startswith('https://'):
+			tmp = os.path.basename(self.fpath)
+			lp_raster_path = tmp.rsplit('.', 1)[0] + '_GLP-' + str(sigma) + 'sig.tif'
+		else:
+			lp_raster_path = self.fpath.rsplit('.', 1)[0] + '_GLP-' + str(sigma) + 'sig.tif'
 		lp_raster = SingleRaster(lp_raster_path)
 		lp_raster.Array2Raster(lowpass, self)
 		self.SetPath(lp_raster_path)
@@ -504,7 +512,11 @@ class SingleRaster:
 		edges = feature.canny(data, sigma=sigma)
 		edges[nodata_pos] = self.GetNoDataValue()
 
-		canny_raster_path = self.fpath.rsplit('.', 1)[0] + '_Canny-' + str(sigma) + 'sig.tif'
+		if self.fpath.startswith('http://') or self.fpath.startswith('https://'):
+			tmp = os.path.basename(self.fpath)
+			canny_raster_path = tmp.rsplit('.', 1)[0] + '_Canny-' + str(sigma) + 'sig.tif'
+		else:
+			canny_raster_path = self.fpath.rsplit('.', 1)[0] + '_Canny-' + str(sigma) + 'sig.tif'
 		canny_raster = SingleRaster(canny_raster_path)
 		canny_raster.Array2Raster(edges, self)
 		self.SetPath(canny_raster_path)

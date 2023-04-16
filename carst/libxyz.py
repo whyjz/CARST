@@ -12,6 +12,8 @@ from scipy.interpolate import griddata
 from scipy.stats import gaussian_kde
 import pickle
 import matplotlib.pyplot as plt
+import geopandas as gpd
+from shapely.geometry import Point
 
 class DuoZArray:
 
@@ -277,8 +279,6 @@ class ZArray(np.ndarray):
 
 	def VerifyBackcor(self, pngname, uniq, uniq_n, uniq_n_est, background_threshold):
 
-		import matplotlib.pyplot as plt
-
 		pngname = pngname.replace('.png', '-backcor.png')
 		plt.plot(uniq, uniq_n, label='Histogram', color='xkcd:plum')
 		plt.plot(uniq, uniq_n_est, label='Background', color='xkcd:lightgreen')
@@ -292,8 +292,6 @@ class ZArray(np.ndarray):
 
 
 	def HistWithOutliers(self, pngname, histogram_bound=10):
-
-		import matplotlib.pyplot as plt
 
 		nbins = len(self) // 4 + 1
 		nbins = 201 if nbins > 201 else nbins
@@ -385,8 +383,6 @@ class XYZFile:
 
 		# for getUncertaintyDEM
 
-		import matplotlib.pyplot as plt
-		
 		nbins = len(self.diffval) // 5
 		nbins = 200 if nbins > 200 else nbins
 		bins = np.linspace(min(self.diffval), max(self.diffval), nbins)
@@ -430,7 +426,6 @@ class AmpcoroffFile:
 		column 8: Conv 3
 		"""
 
-		import pickle
 		self.data = pickle.load(open(self.fpath, 'rb'))
 		# self.data = np.loadtxt(self.fpath)
 		self.CheckData()
@@ -649,10 +644,8 @@ def points_in_polygon(points_geometry, shp_filename):
 
 	# return: np mask array showing where the targeted points are.
 
-	import logging
-	logging.basicConfig(level=logging.WARNING)
-	import geopandas as gpd
-	from shapely.geometry import Point
+	# import logging
+	# logging.basicConfig(level=logging.WARNING)
 	# from shapely.geometry import mapping
 
 
