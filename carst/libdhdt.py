@@ -293,6 +293,50 @@ def onclick_wrapper(data, fig, ax):
 	    figi.show()
 	return onclick
 
+class PixelTimeSeries(object):
+    """
+    Store all measurements of a single pixel in the reference DEM.
+    Always an n-by-3 array:
+    Column 1: date
+    Column 2: value
+    Column 3: uncertainty
+    """
+    def __init__(self, data=np.ndarray([0, 3])):
+        data = np.array(data) if type(data) is not np.ndarray else data
+        self.verify_record(data)
+        self.data = data
+
+    def __repr__(self):
+        return 'PixelTimeSeries({})'.format(self.data)
+    
+    @staticmethod
+    def verify_record(record):
+        """
+        Verify if the input record meets the format requirements.
+        """
+        if record.ndim == 1 and record.size == 3:
+            pass
+        elif record.ndim == 2 and record.shape[1] == 3:
+            pass
+        else:
+            raise ValueError("Inconsistent input record. Must be an n-by-3 array.")
+    
+    def add_record(self, record):
+        """
+        Add one or more records to the time series.
+        """
+        record = np.array(record) if type(record) is not np.ndarray else record
+        self.verify_record(record)
+        self.data = np.vstack((self.data, record))
+        
+    def get_date(self):
+        return self.data[:, 0]
+    
+    def get_value(self):
+        return self.data[:, 1]
+    
+    def get_uncertainty(self):
+        return self.data[:, 2]
 
 
 class DemPile(object):
