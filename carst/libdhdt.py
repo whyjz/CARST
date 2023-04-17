@@ -118,20 +118,22 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 		return np.ones_like(resamp_ref_dem.ReadAsArray()) * -9999.0
 
 def EVMD(y, threshold=6):
-	validated_value = None
-	if y.size <= 1:
-		exitstate = y.size
-	else:
-		exitstate = 1
-		for i in range(y.size - 1):
-			comparison = y[i+1:] - y[i]
-			if any(abs(comparison) < threshold):
-				validated_value = y[i]
-				exitstate = -10
-				break
-			else:
-				exitstate += 1
-	return exitstate, validated_value
+    validated_value = None
+    validated_value_idx = None
+    if y.size <= 1:
+        exitstate = y.size
+    else:
+        exitstate = 1
+        for i in range(y.size - 1):
+            comparison = y[i+1:] - y[i]
+            if any(abs(comparison) < threshold):
+                validated_value_idx = i
+                validated_value = y[i]
+                exitstate = -10
+                break
+            else:
+                exitstate += 1
+    return exitstate, validated_value, validated_value_idx
 
 def EVMD_idx(y, validated_value, threshold=6):
 	validated_range = [validated_value - threshold, validated_value + threshold]
@@ -145,7 +147,7 @@ def EVMD_idx(y, validated_value, threshold=6):
 
 def wlr_corefun(x, y, ye, evmd_threshold=6, detailed=False):
 	# wlr = weighted linear regression.
-	exitstate, validated_value = EVMD(y, threshold=evmd_threshold)
+	exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
 	if exitstate >= 0 or (max(x) - min(x)) < 1:
 		slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
 		return slope, slope_err, resid, count
@@ -331,6 +333,7 @@ class DemPile(object):
         if refgeo is not None:
             self.refgeomask = refgeo.ReadAsArray().astype(bool)
         self.fitdata = {'slope': [], 'slope_err': [], 'residual': [], 'count': []}
+        self.mosaic = {'value': [], 'date': [], 'uncertainty': []}
         self.maskparam = {'max_uncertainty': 9999, 'min_time_span': 0}
         self.evmd_threshold = 6
 
@@ -500,6 +503,41 @@ class DemPile(object):
         dhdt_count = SingleRaster(self.dhdtprefix + '_dhdt_count.tif')
         return dhdt_dem, dhdt_error, dhdt_res, dhdt_count
     
+    def form_mosaic(self, order='ascending'):
+        """
+        order options:
+            ascending: early elevations will be populated first
+            descending: late elevations will be populated first
+        """
+        # ==== Create mosaicked array ====
+        self.mosaic['value']           = np.full_like(self.ts, np.nan, dtype=float)
+        self.mosaic['date']            = np.full_like(self.ts, np.nan, dtype=float)
+        self.mosaic['uncertainty']     = np.full_like(self.ts, np.nan, dtype=float)
+        for m in range(self.ts.shape[0]):
+            if m % 100 == 0:
+                print(m)
+            for n in range(self.ts.shape[1]):
+                date = self.ts[m, n].get_date()
+                uncertainty = self.ts[m, n].get_uncertainty()
+                value = self.ts[m, n].get_value()
+                if order == 'descending':
+                    date = np.flip(date)
+                    uncertainty = np.flip(uncertainty)
+                    value = np.flip(value)
+                elif order != 'ascending':
+                    raise ValueError('order must be "ascending" or "descending".')
+                exitstate, validated_value, validated_value_idx = EVMD(value, threshold=self.evmd_threshold)
+                if exitstate < 0:
+                    self.mosaic['value'][m, n] = validated_value
+                    self.mosaic['date'][m, n] = date[validated_value_idx]
+                    self.mosaic['uncertainty'][m, n] = uncertainty[validated_value_idx]
+        mosaic_value       = SingleRaster('{}_mosaic-{}_value.tif'.format(self.dhdtprefix, order))
+        mosaic_date        = SingleRaster('{}_mosaic-{}_date.tif'.format(self.dhdtprefix, order))
+        mosaic_uncertainty = SingleRaster('{}_mosaic-{}_uncertainty.tif'.format(self.dhdtprefix, order))
+        mosaic_value.Array2Raster(self.mosaic['value'], self.refgeo)
+        mosaic_date.Array2Raster(self.mosaic['date'], self.refgeo)
+        mosaic_uncertainty.Array2Raster(self.mosaic['uncertainty'], self.refgeo)                
+    
     def viz(self):
         dhdt_raster, _, _, _ = self.ShowDhdtTifs()
         img = dhdt_raster.ReadAsArray()
@@ -508,10 +546,10 @@ class DemPile(object):
         fig, axs = plt.subplots(2, 1, figsize=(8,8))                   # figsize might need to change
         first_img = axs[0].imshow(img, cmap='RdBu', vmin=-6, vmax=6)   # minmax might need to change
         
-        onclick = onclick_wrapper(self.ts, axs)
+        onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold)
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
-def onclick_wrapper(data, axs):
+def onclick_wrapper(data, axs, evmd_threshold):
     def onclick_ipynb(event):
         """
         Callback function for mouse click
@@ -524,7 +562,7 @@ def onclick_wrapper(data, axs):
         xx = data[row, col].get_date()
         yy = data[row, col].get_value()
         ye = data[row, col].get_uncertainty()
-        slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=80, detailed=True)
+        slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=evmd_threshold, detailed=True)   
         SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
         SSRes = np.sum((y_good - y_goodest) ** 2)
         SST = np.sum((y_good - np.mean(y_good)) ** 2)
@@ -542,15 +580,6 @@ def onclick_wrapper(data, axs):
         axs[1].set_xlabel('days, from xxxx-01-01')
         axs[1].set_ylabel('height (m)')
     return onclick_ipynb
-
-
-# fig, ax = plt.subplots()
-# img[img < -9000] = np.nan
-# ax.imshow(img, cmap='RdBu', vmin=-6, vmax=6)
-# onclick = onclick_wrapper(data, fig, ax)
-
-# cid = fig.canvas.mpl_connect('button_press_event', onclick)
-# cid = fig.canvas.mpl_connect('button_press_event', onclick2)
 
 
 
