@@ -136,59 +136,61 @@ def EVMD(y, threshold=6):
     return exitstate, validated_value, validated_value_idx
 
 def EVMD_idx(y, validated_value, threshold=6):
-	validated_range = [validated_value - threshold, validated_value + threshold]
-	idx = np.zeros_like(y, dtype=bool)
-	for i in range(y.size):
-		if validated_range[0] <= y[i] <= validated_range[1]:
-			idx[i] = True
-			tmp = np.append(validated_range, [y[i] - threshold, y[i] + threshold])
-			validated_range = [min(tmp), max(tmp)]
-	return idx
+    validated_range = [validated_value - threshold, validated_value + threshold]
+    idx = np.zeros_like(y, dtype=bool)
+    for i in range(y.size):
+        if validated_range[0] <= y[i] <= validated_range[1]:
+            idx[i] = True
+            tmp = np.append(validated_range, [y[i] - threshold, y[i] + threshold])
+            validated_range = [min(tmp), max(tmp)]
+    return idx
 
 def wlr_corefun(x, y, ye, evmd_threshold=6, detailed=False):
-	# wlr = weighted linear regression.
-	exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
-	if exitstate >= 0 or (max(x) - min(x)) < 1:
-		slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
-		return slope, slope_err, resid, count
-	else:
-		# if x.size == 3:
-		# print(x, y, ye)
-		idx = EVMD_idx(y, validated_value, threshold=evmd_threshold)
-		if sum(idx) >= 3:
-			x = x[idx]
-			y = y[idx]
-			ye = ye[idx]
-			w     = [1 / k for k in ye]
-			G     = np.vstack([x, np.ones(x.size)]).T   # defines the model (y = a + bx)
-			W     = np.diag(w)
-			Gw    = W @ G
-			yw    = W @ y.T                          # assuming y is a 1-by-N array
-			cov_m =     inv(Gw.T @ Gw)               # covariance matrix
-			p     =     inv(Gw.T @ Gw) @ Gw.T @ yw   # model coefficients
-			H     = G @ inv(Gw.T @ Gw) @ Gw.T @ W    # projection matrix
-			h     = np.diag(H)                       # leverage
-			y_est = np.polyval(p, x)                 # the estimate of y
-			ri2   = (y - y_est) ** 2
-			resid = np.sum(ri2)                      # sum of squared error
-			error =  np.sqrt(cov_m[0, 0])
-			p_num = 2                                # how many coefficients we want (in this case, 2 comes from y = a + bx)
-			mse   = resid / (x.size - p_num)         # mean squared error
-			slope = p[0] * 365.25
-			slope_err = np.sqrt(cov_m[0, 0]) * 365.25
-			count = x.size
-			# if resid > 100000:
-			# 	print(x,y,ye,cookd,goodpoint)
-			if detailed:
-				return slope, slope_err, resid, count, x, y, y_est
-			else:
-				return slope, slope_err, resid, count
-		else:
-			slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
-			if detailed:
-				return slope, slope_err, resid, count, x, y, y
-			else:
-				return slope, slope_err, resid, count
+    # wlr = weighted linear regression.
+    exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
+    if exitstate >= 0 or (max(x) - min(x)) < 1:
+        slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
+        return slope, slope_err, resid, count
+    else:
+        # if x.size == 3:
+        # print(x, y, ye)
+        idx = EVMD_idx(y, validated_value, threshold=evmd_threshold)
+        if sum(idx) >= 3:
+            x = x[idx]
+            y = y[idx]
+            ye = ye[idx]
+            w     = [1 / k for k in ye]
+            G     = np.vstack([x, np.ones(x.size)]).T   # defines the model (y = a + bx)
+            W     = np.diag(w)
+            Gw    = W @ G
+            yw    = W @ y.T                          # assuming y is a 1-by-N array
+            cov_m =     inv(Gw.T @ Gw)               # covariance matrix
+            p     =     inv(Gw.T @ Gw) @ Gw.T @ yw   # model coefficients
+            H     = G @ inv(Gw.T @ Gw) @ Gw.T @ W    # projection matrix
+            h     = np.diag(H)                       # leverage
+            y_est = np.polyval(p, x)                 # the estimate of y
+            ri2   = (y - y_est) ** 2
+            resid = np.sum(ri2)                      # sum of squared error
+            error =  np.sqrt(cov_m[0, 0])
+            p_num = 2                                # how many coefficients we want (in this case, 2 comes from y = a + bx)
+            mse   = resid / (x.size - p_num)         # mean squared error
+            slope = p[0] * 365.25
+            slope_err = np.sqrt(cov_m[0, 0]) * 365.25
+            count = x.size
+            # if resid > 100000:
+            #   print(x,y,ye,cookd,goodpoint)
+            if detailed:
+                return slope, slope_err, resid, count, x, y, y_est
+            else:
+                return slope, slope_err, resid, count
+        else:
+            slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
+            if detailed:
+                x = x[idx]
+                y = y[idx]
+                return slope, slope_err, resid, count, x, y, y
+            else:
+                return slope, slope_err, resid, count
 
 
 		# ============ Using Cook's Distance ============
