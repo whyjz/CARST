@@ -22,6 +22,7 @@ from carst import ConfParams
 from carst.libraster import SingleRaster
 import pickle
 import matplotlib.pyplot as plt
+from sklearn.cluster import DBSCAN
 
 def timeit(func):
     def time_wrapper(*args, **kwargs):
@@ -117,22 +118,66 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 	else:
 		return np.ones_like(resamp_ref_dem.ReadAsArray()) * -9999.0
 
-def EVMD(y, threshold=6):
-    validated_value = None
-    validated_value_idx = None
-    if y.size <= 1:
-        exitstate = y.size
+    
+def EVMD_DBSCAN(x, y, eps=6, min_samples=4):
+    """
+    See EVMD & EVMD_idx.
+    """
+    # x, assuming the temporal axis (unit=days), is scaled by 365 for proper eps consideration.
+    x2d = np.column_stack((x / 365, y))
+    if x2d.shape[0] >= 2:
+        db = DBSCAN(eps=eps, min_samples=min_samples).fit(x2d)
+        verified_y_labels = db.labels_ >= 0
+        # verified_y_labels_idx = np.where(verified_y_labels)
+        if any(verified_y_labels):
+            exitstate = 1
+        else:
+            exitstate = -1
     else:
-        exitstate = 1
-        for i in range(y.size - 1):
-            comparison = y[i+1:] - y[i]
-            if any(abs(comparison) < threshold):
-                validated_value_idx = i
-                validated_value = y[i]
-                exitstate = -10
-                break
-            else:
-                exitstate += 1
+        exitstate = -1
+        verified_y_labels = np.full_like(y, False)
+    return exitstate, verified_y_labels
+    
+    
+def EVMD(y, x=None, threshold=6, method='legacy'):
+    """
+    Elevation Verification from Multiple DEMs.
+    method: 'DBSCAN' or 'legacy'
+    """
+    if method == 'DBSCAN':
+        # x, assuming the temporal axis (unit=days), is scaled by 100 for proper eps consideration.
+        x2d = np.coulmn_stack((x / 100, y))
+        # min samples is fixed at 4 (i.e., four DEMs together can be considered as a cluster!)
+        min_samples = 3
+        db = DBSCAN(eps=threshold, min_samples=min_samples).fit(x2d)
+        verified_y_labels = db.labels_ >= 0
+        verified_y_labels_idx = np.where(verified_y_labels)
+        if any(verified_y_labels):
+            exitstate = -10
+            validated_value = y[verified_y_labels_idx[0]]
+            validated_value_idx = verified_y_labels_idx[0]
+        else:
+            exitstate = 1
+            validated_value = None
+            validated_value_idx = None
+    elif method == 'legacy':
+        validated_value = None
+        validated_value_idx = None
+        if y.size <= 1:
+            exitstate = y.size
+        else:
+            exitstate = 1
+            for i in range(y.size - 1):
+                comparison = y[i+1:] - y[i]
+                if any(abs(comparison) < threshold):
+                    validated_value_idx = i
+                    validated_value = y[i]
+                    exitstate = -10
+                    break
+                else:
+                    exitstate += 1
+    else:
+        raise ValueError('method must be "DBSCAN" or "legacy".')
     return exitstate, validated_value, validated_value_idx
 
 def EVMD_idx(y, validated_value, threshold=6):
@@ -147,14 +192,16 @@ def EVMD_idx(y, validated_value, threshold=6):
 
 def wlr_corefun(x, y, ye, evmd_threshold=6, detailed=False):
     # wlr = weighted linear regression.
-    exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
-    if exitstate >= 0 or (max(x) - min(x)) < 1:
+    # exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
+    exitstate, idx = EVMD_DBSCAN(x, y, eps=evmd_threshold)
+    # if exitstate >= 0 or (max(x) - min(x)) < 1:
+    if exitstate < 0 or (max(x) - min(x)) < 1:
         slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
         return slope, slope_err, resid, count
     else:
         # if x.size == 3:
         # print(x, y, ye)
-        idx = EVMD_idx(y, validated_value, threshold=evmd_threshold)
+        # idx = EVMD_idx(y, validated_value, threshold=evmd_threshold)
         if sum(idx) >= 3:
             x = x[idx]
             y = y[idx]
@@ -505,11 +552,13 @@ class DemPile(object):
         dhdt_count = SingleRaster(self.dhdtprefix + '_dhdt_count.tif')
         return dhdt_dem, dhdt_error, dhdt_res, dhdt_count
     
-    def form_mosaic(self, order='ascending'):
+    @timeit
+    def form_mosaic(self, order='ascending', method='DBSCAN'):
         """
         order options:
             ascending: early elevations will be populated first
             descending: late elevations will be populated first
+        method: 'DBSCAN' or 'legacy'
         """
         # ==== Create mosaicked array ====
         self.mosaic['value']           = np.full_like(self.ts, np.nan, dtype=float)
@@ -522,17 +571,33 @@ class DemPile(object):
                 date = self.ts[m, n].get_date()
                 uncertainty = self.ts[m, n].get_uncertainty()
                 value = self.ts[m, n].get_value()
-                if order == 'descending':
-                    date = np.flip(date)
-                    uncertainty = np.flip(uncertainty)
-                    value = np.flip(value)
-                elif order != 'ascending':
-                    raise ValueError('order must be "ascending" or "descending".')
-                exitstate, validated_value, validated_value_idx = EVMD(value, threshold=self.evmd_threshold)
-                if exitstate < 0:
-                    self.mosaic['value'][m, n] = validated_value
-                    self.mosaic['date'][m, n] = date[validated_value_idx]
-                    self.mosaic['uncertainty'][m, n] = uncertainty[validated_value_idx]
+                if method == 'DBSCAN':
+                    exitstate, verified_y_labels = EVMD_DBSCAN(date, value, eps=self.evmd_threshold)
+                    if exitstate >= 0:
+                        verified_y_labels_idx = np.where(verified_y_labels)[0]
+                        if order == 'descending':
+                            idx = verified_y_labels_idx[-1]
+                        elif order == 'ascending':
+                            idx = verified_y_labels_idx[0]
+                        else:
+                            raise ValueError('order must be "ascending" or "descending".')
+                        self.mosaic['value'][m, n] = value[idx]
+                        self.mosaic['date'][m, n] = date[idx]
+                        self.mosaic['uncertainty'][m, n] = uncertainty[idx]
+                elif method == 'legacy':
+                    if order == 'descending':
+                        date = np.flip(date)
+                        uncertainty = np.flip(uncertainty)
+                        value = np.flip(value)
+                    elif order != 'ascending':
+                        raise ValueError('order must be "ascending" or "descending".')
+                    exitstate, validated_value, validated_value_idx = EVMD(value, threshold=self.evmd_threshold)
+                    if exitstate < 0:
+                        self.mosaic['value'][m, n] = validated_value
+                        self.mosaic['date'][m, n] = date[validated_value_idx]
+                        self.mosaic['uncertainty'][m, n] = uncertainty[validated_value_idx]
+                else:
+                    raise ValueError('method must be "DBSCAN" or "legacy".')
         mosaic_value       = SingleRaster('{}_mosaic-{}_value.tif'.format(self.dhdtprefix, order))
         mosaic_date        = SingleRaster('{}_mosaic-{}_date.tif'.format(self.dhdtprefix, order))
         mosaic_uncertainty = SingleRaster('{}_mosaic-{}_uncertainty.tif'.format(self.dhdtprefix, order))
@@ -558,29 +623,30 @@ def onclick_wrapper(data, axs, evmd_threshold):
         """
         print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
           ('double' if event.dblclick else 'single', event.button,
-           event.x, event.y, event.xdata, event.ydata))
-        col = int(event.xdata)
-        row = int(event.ydata)
-        xx = data[row, col].get_date()
-        yy = data[row, col].get_value()
-        ye = data[row, col].get_uncertainty()
-        slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=evmd_threshold, detailed=True)   
-        SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
-        SSRes = np.sum((y_good - y_goodest) ** 2)
-        SST = np.sum((y_good - np.mean(y_good)) ** 2)
-        Rsquared = 1 - SSRes / SST
-        axs[0].plot(event.xdata, event.ydata, '.', markersize=10, markeredgewidth=1, markeredgecolor='k', color='xkcd:green')
-        axs[1].cla()
-        axs[1].errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='ko')
-        np.set_printoptions(precision=3)
-        np.set_printoptions(suppress=True)
-        xye = np.vstack((xx,yy,ye)).T
-        print(xye[xye[:,1].argsort()])
-        axs[1].plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
-        axs[1].plot(x_good, y_good, '.', color='r', markersize=8, zorder=30)
-        axs[1].text(0.1, 0.1, 'R^2 = {:.4f}'.format(Rsquared), transform=ax.transAxes)
-        axs[1].set_xlabel('days, from xxxx-01-01')
-        axs[1].set_ylabel('height (m)')
+           event.x, event.y, event.xdata, event.ydata))     # only works for non-Notebook backend?
+        if event.inaxes is axs[0]:
+            col = int(event.xdata)
+            row = int(event.ydata)
+            xx = data[row, col].get_date()
+            yy = data[row, col].get_value()
+            ye = data[row, col].get_uncertainty()
+            slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=evmd_threshold, detailed=True)   
+            SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
+            SSRes = np.sum((y_good - y_goodest) ** 2)
+            SST = np.sum((y_good - np.mean(y_good)) ** 2)
+            Rsquared = 1 - SSRes / SST
+            axs[0].plot(event.xdata, event.ydata, '.', markersize=10, markeredgewidth=1, markeredgecolor='k', color='xkcd:green')
+            axs[1].cla()
+            axs[1].errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='ko')
+            np.set_printoptions(precision=3)
+            np.set_printoptions(suppress=True)
+            xye = np.vstack((xx,yy,ye)).T
+            print(xye[xye[:,1].argsort()])
+            axs[1].plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
+            axs[1].plot(x_good, y_good, '.', color='r', markersize=8, zorder=30)
+            # axs[1].text(0.1, 0.1, 'R^2 = {:.4f}'.format(Rsquared), transform=ax.transAxes)
+            axs[1].set_xlabel('data[{}, {}] (days, from xxxx-01-01)'.format(row, col))
+            axs[1].set_ylabel('height (m)')
     return onclick_ipynb
 
 
