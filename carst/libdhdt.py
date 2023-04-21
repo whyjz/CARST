@@ -37,20 +37,20 @@ def timeit(func):
 
 def Resample_Array2(orig_dem, resamp_ref_dem, resampleAlg='bilinear'):
 
-	"""
-	resample orig_dem using the extent and spacing provided by resamp_ref_dem
-	orig_dem: class UtilRaster.SingleRaster object
-	resamp_ref_dem: class UtilRaster.SingleRaster object
-	returns: an numpy array, which you can use the methods in UtilRaster to trasform it into a raster
+    """
+    resample orig_dem using the extent and spacing provided by resamp_ref_dem
+    orig_dem: class UtilRaster.SingleRaster object
+    resamp_ref_dem: class UtilRaster.SingleRaster object
+    returns: an numpy array, which you can use the methods in UtilRaster to trasform it into a raster
 
-	This one uses gdal.Warp API.
-	"""
+    This one uses gdal.Warp API.
+    """
 
-	ds = gdal.Open(orig_dem.fpath)
-	ulx, uly, lrx, lry = resamp_ref_dem.GetExtent()
-	opts = gdal.WarpOptions(outputBounds=(ulx, lry, lrx, uly), xRes=resamp_ref_dem.GetXRes(), yRes=resamp_ref_dem.GetYRes(), resampleAlg=resampleAlg)
-	out_ds = gdal.Warp('tmp.tif', ds, options=opts)
-	return out_ds.GetRasterBand(1).ReadAsArray()
+    ds = gdal.Open(orig_dem.fpath)
+    ulx, uly, lrx, lry = resamp_ref_dem.GetExtent()
+    opts = gdal.WarpOptions(outputBounds=(ulx, lry, lrx, uly), xRes=resamp_ref_dem.GetXRes(), yRes=resamp_ref_dem.GetYRes(), resampleAlg=resampleAlg)
+    out_ds = gdal.Warp('tmp.tif', ds, options=opts)
+    return out_ds.GetRasterBand(1).ReadAsArray()
 
 
 def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):

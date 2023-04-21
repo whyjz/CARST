@@ -13,11 +13,13 @@ import os
 ##### Make URL file to work: deactive the DODS driver
 # https://github.com/mapbox/rasterio/issues/1000
 # https://trac.osgeo.org/gdal/ticket/2696
+# Now using the first method since DODS driver was removed in gdal 3.5.
+# https://github.com/OSGeo/gdal/issues/5173
 
 ### method #1
 # gdal.GetDriverByName('DODS').Deregister()
 ### method #2
-os.environ["GDAL_SKIP"] = 'DODS'
+# os.environ["GDAL_SKIP"] = 'DODS'
 #####################################################
 
 
@@ -26,12 +28,16 @@ from subprocess import PIPE
 import numpy as np
 from datetime import datetime
 try:
-	import gdal
-except:
-	from osgeo import gdal        # sometimes gdal is part of osgeo modules
+    from osgeo import gdal
+except ImportError:
+    import gdal    # this was used until GDAL 3.1
 from osgeo import osr
 # we assume the fpath is the file with .tif or .TIF suffix.
 
+try:
+    gdal.GetDriverByName('DODS').Deregister()
+except AttributeError:          # In Case that DODS driver does not exist (for GDAL >= 3.5)
+    pass
 
 def timeit(func):
     def time_wrapper(*args, **kwargs):
