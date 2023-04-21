@@ -35,6 +35,35 @@ def timeit(func):
         return dec_func
     return time_wrapper
 
+def resample_array(source, reference, method='bilinear', destination=None):
+    """
+    resample the source raster using the extent and spacing provided by the reference raster. Two rasters must be in the same CRS.
+    
+    source: class UtilRaster.SingleRaster object
+    reference: class UtilRaster.SingleRaster object
+    destination: str, filename for the output to be written. If None, a temporary file (/vismem/) will be used.
+    
+    returns: an numpy array, which you can use the methods in UtilRaster to trasform it into a raster.
+
+    For better COG processing efficiency, we rasterio to check the if the source and the reference intersect each other.
+    For fasting resampling, we use GDAL and it C library.
+    """
+    
+    s_ulx, s_uly, s_lrx, s_lry = source.get_extent()
+    source_extent = Polygon([(s_ulx, s_uly), (s_lrx, s_uly), (s_lrx, s_lry), (s_ulx, s_lry)])
+    ulx, uly, lrx, lry = reference.get_extent()
+    reference_extent = Polygon([(ulx, uly), (lrx, uly), (lrx, lry), (ulx, lry)])
+    if source_extent.intersects(reference_extent):
+        ds = gdal.Open(source.fpath)
+        opts = gdal.WarpOptions(outputBounds=(ulx, lry, lrx, uly), xRes=reference.get_x_res(), yRes=reference.get_y_res(), resampleAlg=method)
+        if not destination:
+            out_ds = gdal.Warp('/vsimem/resampled.tif', ds, options=opts)
+        else:
+            out_ds = gdal.Warp(destination, ds, options=opts)
+        return out_ds.GetRasterBand(1).ReadAsArray()
+    else:
+        return np.full((reference.get_y_size(), reference.get_x_size()), reference.get_nodata())
+
 def Resample_Array2(orig_dem, resamp_ref_dem, resampleAlg='bilinear'):
 
     """
@@ -47,8 +76,8 @@ def Resample_Array2(orig_dem, resamp_ref_dem, resampleAlg='bilinear'):
     """
 
     ds = gdal.Open(orig_dem.fpath)
-    ulx, uly, lrx, lry = resamp_ref_dem.GetExtent()
-    opts = gdal.WarpOptions(outputBounds=(ulx, lry, lrx, uly), xRes=resamp_ref_dem.GetXRes(), yRes=resamp_ref_dem.GetYRes(), resampleAlg=resampleAlg)
+    ulx, uly, lrx, lry = resamp_ref_dem.get_extent()
+    opts = gdal.WarpOptions(outputBounds=(ulx, lry, lrx, uly), xRes=resamp_ref_dem.get_x_res(), yRes=resamp_ref_dem.get_y_res(), resampleAlg=resampleAlg)
     out_ds = gdal.Warp('tmp.tif', ds, options=opts)
     return out_ds.GetRasterBand(1).ReadAsArray()
 
@@ -67,33 +96,33 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 	resamp_method: 'linear', 'cubic', 'quintic', 'nearest'
 
 	"""
-	o_ulx, o_uly, o_lrx, o_lry = orig_dem.GetExtent()
+	o_ulx, o_uly, o_lrx, o_lry = orig_dem.get_extent()
 	o_ulx, o_xres, o_xskew, o_uly, o_yskew, o_yres = orig_dem.GetGeoTransform()
 	orig_dem_extent = Polygon([(o_ulx, o_uly), (o_lrx, o_uly), (o_lrx, o_lry), (o_ulx, o_lry)])
-	ulx, uly, lrx, lry = resamp_ref_dem.GetExtent()
+	ulx, uly, lrx, lry = resamp_ref_dem.get_extent()
 	ulx, xres, xskew, uly, yskew, yres = resamp_ref_dem.GetGeoTransform()
 	resamp_ref_dem_extent = Polygon([(ulx, uly), (lrx, uly), (lrx, lry), (ulx, lry)])
 	if orig_dem_extent.intersects(resamp_ref_dem_extent):
-		x = np.linspace(o_ulx, o_lrx - o_xres, orig_dem.GetRasterXSize())
-		y = np.linspace(o_uly, o_lry - o_yres, orig_dem.GetRasterYSize())
+		x = np.linspace(o_ulx, o_lrx - o_xres, orig_dem.get_x_size())
+		y = np.linspace(o_uly, o_lry - o_yres, orig_dem.get_y_size())
 		z = orig_dem.ReadAsArray()
-		# z[z == orig_dem.GetNoDataValue()] = np.nan    # this line probably needs improvement
+		# z[z == orig_dem.get_nodata()] = np.nan    # this line probably needs improvement
 		if resamp_method == 'nearest':
 			print('resampling method = nearest')
 			xx, yy = np.meshgrid(x, y)
 			points = np.stack((np.reshape(xx, xx.size), np.reshape(yy, yy.size)), axis=-1)
 			values = np.reshape(z, z.size)
 			fun = NearestNDInterpolator(points, values)
-			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
-			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
+			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.get_x_size())
+			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.get_y_size())
 			xxnew, yynew = np.meshgrid(xnew, ynew)
 			znew = fun(xxnew, yynew)    # if the image is big, this may take a long time (much longer than linear approach)
 		elif resamp_method == 'linear':
-			nan_value = orig_dem.GetNoDataValue()
+			nan_value = orig_dem.get_nodata()
 			print('resampling method = interp2d - ' + resamp_method)
 			fun = interp2d(x, y, z, kind=resamp_method, bounds_error=False, copy=False, fill_value=nan_value)
-			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
-			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
+			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.get_x_size())
+			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.get_y_size())
 			znew = np.flipud(fun(xnew, ynew))    # I don't know why, but it seems f(xnew, ynew) is upside down.
 			fun2 = interp2d(x, y, z != nan_value, kind=resamp_method, bounds_error=False, copy=False, fill_value=0)
 			zmask = np.flipud(fun2(xnew, ynew))
@@ -105,12 +134,12 @@ def Resample_Array(orig_dem, resamp_ref_dem, resamp_method='linear'):
 			xx = xx.ravel()
 			yy = yy.ravel()
 			zz = z.ravel()
-			realdata_pos = zz != orig_dem.GetNoDataValue()
+			realdata_pos = zz != orig_dem.get_nodata()
 			xx = xx[realdata_pos]
 			yy = yy[realdata_pos]
 			zz = zz[realdata_pos]
-			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.GetRasterXSize())
-			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.GetRasterYSize())
+			xnew = np.linspace(ulx, lrx - xres, resamp_ref_dem.get_x_size())
+			ynew = np.linspace(uly, lry - yres, resamp_ref_dem.get_y_size())
 			znew = griddata((xx, yy), zz, (xnew[None,:], ynew[:,None]), method='linear')
 		del z
 		gc.collect()
@@ -426,8 +455,8 @@ class DemPile(object):
 
     def InitTS(self):
         # ==== Prepare the reference geometry ====
-        refgeo_Ysize = self.refgeo.GetRasterYSize()
-        refgeo_Xsize = self.refgeo.GetRasterXSize()
+        refgeo_Ysize = self.refgeo.get_y_size()
+        refgeo_Xsize = self.refgeo.get_x_size()
         self.ts = np.empty([refgeo_Ysize, refgeo_Xsize], dtype=object)
         # for j in range(self.ts.shape[0]):
         #     for i in range(self.ts.shape[1]):
@@ -682,7 +711,7 @@ class TimeSeriesDEM(np.ndarray):
 		if dem is not None:
 			# retrieve band 1 array, and then replace NoDataValue by np.nan
 			dem_array = dem.ReadAsArray()
-			dem_array[dem_array == dem.GetNoDataValue()] = np.nan
+			dem_array[dem_array == dem.get_nodata()] = np.nan
 			obj = np.asarray(dem_array).view(cls)
 			obj.date = [dem.date]
 			obj.uncertainty = [dem.uncertainty]
@@ -718,7 +747,7 @@ class TimeSeriesDEM(np.ndarray):
 		self.uncertainty.append(dem.uncertainty)
 		# Add the first band, and then replace NoDataValue by np.nan
 		dem_array = dem.ReadAsArray()
-		dem_array[dem_array == dem.GetNoDataValue()] = np.nan
+		dem_array[dem_array == dem.get_nodata()] = np.nan
 		return TimeSeriesDEM(array=np.dstack([self, dem_array]), date=self.date, uncertainty=self.uncertainty)
 
 	def Date2DayDelta(self):
