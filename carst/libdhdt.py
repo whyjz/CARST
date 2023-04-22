@@ -78,7 +78,7 @@ def EVMD_DBSCAN(x, y, eps=6, min_samples=4):
     """
     # x, assuming the temporal axis (unit=days), is scaled by 365 for proper eps consideration.
     x2d = np.column_stack((x / 365, y))
-    if x2d.shape[0] >= 2:
+    if x2d.shape[0] >= min_samples:
         db = DBSCAN(eps=eps, min_samples=min_samples).fit(x2d)
         # verified_y_labels = db.labels_ >= 0
         verified_y_labels = db.labels_
@@ -145,11 +145,15 @@ def EVMD_idx(y, validated_value, threshold=6):
             validated_range = [min(tmp), max(tmp)]
     return idx
 
-def wlr_corefun(x, y, ye, evmd_threshold=6, detailed=False):
+def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False):
     # wlr = weighted linear regression.
     # exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
-    exitstate, labels = EVMD_DBSCAN(x, y, eps=evmd_threshold)
-    idx = labels >= 0
+    if evmd_labels is None:
+        exitstate, evmd_labels = EVMD_DBSCAN(x, y, eps=evmd_threshold)
+    else:
+        exitstate = 1 if any(evmd_labels >= 0) else -1
+        
+    idx = evmd_labels >= 0
     # if exitstate >= 0 or (max(x) - min(x)) < 1:
     if exitstate < 0 or (max(x) - min(x)) < 1:
         slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
@@ -215,6 +219,15 @@ class PixelTimeSeries(object):
     def __repr__(self):
         return 'PixelTimeSeries({})'.format(self.data)
     
+    def get_date(self):
+        return self.data[:, 0]
+    
+    def get_value(self):
+        return self.data[:, 1]
+    
+    def get_uncertainty(self):
+        return self.data[:, 2]
+    
     @staticmethod
     def verify_record(record):
         """
@@ -249,14 +262,20 @@ class PixelTimeSeries(object):
         self.verify_evmd_labels(labels)
         self.evmd_labels = labels
         
-    def get_date(self):
-        return self.data[:, 0]
+    def do_evmd(self, eps=6):
+        date = self.get_date()
+        value = self.get_value()
+        exitstate, labels = EVMD_DBSCAN(date, value, eps=eps)
+        return exitstate, labels
     
-    def get_value(self):
-        return self.data[:, 1]
-    
-    def get_uncertainty(self):
-        return self.data[:, 2]
+    def do_wlr(self, evmd_threshold=6):
+        date = self.get_date()
+        value = self.get_value()
+        uncertainty = self.get_uncertainty()
+        evmd_labels = self.evmd_labels
+        single_results = wlr_corefun(date, value, uncertainty, evmd_labels=evmd_labels, evmd_threshold=evmd_threshold)
+        # single_results is (slope, slope_err, residual, count)
+        return single_results
 
 
 class DemPile(object):
@@ -381,56 +400,65 @@ class DemPile(object):
 
     def LoadPickle(self):
         self.ts = pickle.load( open(self.picklepath, "rb") )
-
-    @timeit
-    def Polyfit(self):
+        
+    def init_fitdata(self):
         # ==== Create final array ====
-        self.fitdata['slope']     = np.ones_like(self.ts, dtype=float) * -9999
-        self.fitdata['slope_err'] = np.ones_like(self.ts, dtype=float) * -9999
-        self.fitdata['residual']  = np.ones_like(self.ts, dtype=float) * -9999
-        self.fitdata['count']     = np.ones_like(self.ts, dtype=float) * -9999
+        self.fitdata['slope']     = np.full_like(self.ts, self.refgeo.get_nodata())
+        self.fitdata['slope_err'] = np.full_like(self.ts, self.refgeo.get_nodata())
+        self.fitdata['residual']  = np.full_like(self.ts, self.refgeo.get_nodata())
+        self.fitdata['count']     = np.full_like(self.ts, self.refgeo.get_nodata())
+        
+    @timeit
+    def Polyfit(self, parallel=False):
+        # ==== Create final array ====
+        self.init_fitdata()
         # ==== Weighted regression ====
-        print('m total: ', len(self.ts))
-        for m in range(len(self.ts)):
-            if m % 100 == 0:
-                print(m)
-            for n in range(len(self.ts[0])):
-                # self.fitdata['count'][m, n] = len(self.ts[m][n]['date'])
-                # if len(self.ts[m][n]['date']) >= 3:
-                date = self.ts[m, n].get_date()
-                # date = np.array(self.ts[m][n]['date'])
-                uncertainty = self.ts[m, n].get_uncertainty()
-                # uncertainty = np.array(self.ts[m][n]['uncertainty'])
-                value = self.ts[m, n].get_value()
-                # value = np.array(self.ts[m][n]['value'])
-                # pin_value = pin_dem_array[m ,n]
-                # pin_date = pin_dem_date_array[m, n]
-                # date, uncertainty, value = filter_by_slope(date, uncertainty, value, pin_date, pin_value)
-                # date, uncertainty, value = filter_by_redundancy(date, uncertainty, value)
+        if parallel:
+            print('sds')
+            import dask
+            from dask.diagnostics import ProgressBar
+            def batch(seq):
+                sub_results = []
+                for x in seq:
+                    date = x.get_date()
+                    if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
+                        single_results = x.do_wlr(evmd_threshold=self.evmd_threshold)
+                        # single_results is (slope, slope_err, residual, count)
+                    sub_results.append(single_results)
+                return sub_results
+            
+            batches = []
+            for m in range(self.ts.shape[0]):
+                result_batch = dask.delayed(batch)(self.ts[m, :])
+                batches.append(result_batch)
+                
+            with ProgressBar():
+                results = dask.compute(batches)
+            
+            for m in range(self.ts.shape[0]):
+                for n in range(self.ts.shape[1]):
+                    self.fitdata['slope'][m, n] = results[0][m][n][0]
+                    self.fitdata['slope_err'][m, n] = results[0][m][n][1]
+                    self.fitdata['residual'][m, n] = results[0][m][n][2]
+                    self.fitdata['count'][m, n] = results[0][m][n][3]
 
-                # slope_ref = [(value[i] - pin_value) / float(date[i] - pin_date) * 365.25 for i in range(len(value))]
-                # for i in reversed(range(len(slope_ref))):
-                #    if (slope_ref[i] > dhdt_limit_upper) or (slope_ref[i] < dhdt_limit_lower):
-                #        _ = date.pop(i)
-                #        _ = uncertainty.pop(i)
-                #        _ = value.pop(i)
-                # self.fitdata['count'][m, n] = len(date)
+        else:
+            for m in range(self.ts.shape[0]):
+                self.display_progress(m, self.ts.shape[0])
+                for n in range(self.ts.shape[1]):
+                    date = self.ts[m, n].get_date()
+                    # uncertainty = self.ts[m, n].get_uncertainty()
+                    # value = self.ts[m, n].get_value()
+                    # evmd_labels = self.ts[m, n].evmd_labels
 
-                # Whyjay: May 10, 2018: cancelled the min date span (date[-1] - date[0] > 0), previously > 200
-                # if (len(np.unique(date)) >= 3) and (date[-1] - date[0] > 0):
-                if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
-                    slope, slope_err, residual, count = wlr_corefun(date, value, uncertainty, self.evmd_threshold)
-                    # if residual > 100:
-                    #    print(date, value, uncertainty)
-                    self.fitdata['slope'][m, n] = slope
-                    self.fitdata['slope_err'][m, n] = slope_err
-                    self.fitdata['residual'][m, n] = residual
-                    self.fitdata['count'][m, n] = count
-                # else:
-                    # self.fitdata['count'] = len(ref_dem_TS[m][n]['date'])
-                    # elif (date[-1] - date[0] > 0):
-                    #    slope_arr[m, n] = (value[1] - value[0]) / float(date[1] - date[0]) * 365.25
-        # self.fitdata['count'][~self.refgeomask] = -9999
+                    if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
+                        slope, slope_err, residual, count = self.ts[m, n].do_wlr(evmd_threshold=self.evmd_threshold)
+                        # if residual > 100:
+                        #    print(date, value, uncertainty)
+                        self.fitdata['slope'][m, n] = slope
+                        self.fitdata['slope_err'][m, n] = slope_err
+                        self.fitdata['residual'][m, n] = residual
+                        self.fitdata['count'][m, n] = count
 
     def Fitdata2File(self):
         # ==== Write to file ====
@@ -504,16 +532,14 @@ class DemPile(object):
         mosaic_uncertainty.Array2Raster(self.mosaic['uncertainty'], self.refgeo)
         
     @timeit
-    def do_evmd(self, parallel=True):
+    def do_evmd(self, parallel=False):
         if parallel:
             import dask
             from dask.diagnostics import ProgressBar
             def batch(seq):
                 sub_results = []
                 for x in seq:
-                    date = x.get_date()
-                    value = x.get_value()
-                    exitstate, labels = EVMD_DBSCAN(date, value, eps=self.evmd_threshold)
+                    exitstate, labels = x.do_evmd(eps=self.evmd_threshold)
                     sub_results.append(labels)
                 return sub_results
             
@@ -532,10 +558,9 @@ class DemPile(object):
             for m in range(self.ts.shape[0]):
                 self.display_progress(m, self.ts.shape[0])
                 for n in range(self.ts.shape[1]):
-                    date = self.ts[m, n].get_date()
-                    value = self.ts[m, n].get_value()
-                    exitstate, labels = EVMD_DBSCAN(date, value, eps=self.evmd_threshold)
+                    exitstate, labels = self.ts[m, n].do_evmd(eps=self.evmd_threshold)
                     self.ts[m, n].add_evmd_labels(labels)
+                    
                 
     @staticmethod                
     def display_progress(m, total):
