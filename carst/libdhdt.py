@@ -70,12 +70,18 @@ def EVMD_DBSCAN(x, y, eps=6, min_samples=4):
     """
     See EVMD & EVMD_idx.
     Recommended to use this inreplace of EVMD and EVMD_idx.
+    verified_y_labels:
+        -1: outliers
+        0: 1st cluster
+        1: 2nd cluster
+        ...
     """
     # x, assuming the temporal axis (unit=days), is scaled by 365 for proper eps consideration.
     x2d = np.column_stack((x / 365, y))
     if x2d.shape[0] >= 2:
         db = DBSCAN(eps=eps, min_samples=min_samples).fit(x2d)
-        verified_y_labels = db.labels_ >= 0
+        # verified_y_labels = db.labels_ >= 0
+        verified_y_labels = db.labels_
         # verified_y_labels_idx = np.where(verified_y_labels)
         if any(verified_y_labels):
             exitstate = 1
@@ -83,7 +89,8 @@ def EVMD_DBSCAN(x, y, eps=6, min_samples=4):
             exitstate = -1
     else:
         exitstate = -1
-        verified_y_labels = np.full_like(y, False)
+        # verified_y_labels = np.full_like(y, False)
+        verified_y_labels = np.full_like(y, -1)
     return exitstate, verified_y_labels
     
     
@@ -141,7 +148,8 @@ def EVMD_idx(y, validated_value, threshold=6):
 def wlr_corefun(x, y, ye, evmd_threshold=6, detailed=False):
     # wlr = weighted linear regression.
     # exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
-    exitstate, idx = EVMD_DBSCAN(x, y, eps=evmd_threshold)
+    exitstate, labels = EVMD_DBSCAN(x, y, eps=evmd_threshold)
+    idx = labels >= 0
     # if exitstate >= 0 or (max(x) - min(x)) < 1:
     if exitstate < 0 or (max(x) - min(x)) < 1:
         slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
@@ -195,12 +203,14 @@ class PixelTimeSeries(object):
     Column 1: date
     Column 2: value
     Column 3: uncertainty
+    EVMD labels are also stored in this object.
     """
     def __init__(self, data=[]):
         data = np.ndarray([0, 3]) if not data else data                      # [] --> np.ndarray([0, 3])
         data = np.array(data) if type(data) is not np.ndarray else data      # [1, 2, 3] --> np.array([1, 2, 3])
         self.verify_record(data)
         self.data = data
+        self.evmd_labels = None
 
     def __repr__(self):
         return 'PixelTimeSeries({})'.format(self.data)
@@ -216,7 +226,7 @@ class PixelTimeSeries(object):
             pass
         else:
             raise ValueError("Inconsistent input record. Must be an n-by-3 array.")
-    
+           
     def add_record(self, record):
         """
         Add one or more records to the time series.
@@ -224,6 +234,20 @@ class PixelTimeSeries(object):
         record = np.array(record) if type(record) is not np.ndarray else record
         self.verify_record(record)
         self.data = np.vstack((self.data, record))
+        
+    def verify_evmd_labels(self, labels):
+        """
+        Verify if the input EVMD labels meet the format requirements.
+        """
+        if labels.size == self.data.shape[0]:
+            pass
+        else:
+            raise ValueError("Inconsistent EVMD label input. Must be n labels where n = data points in the data.")
+        
+    def add_evmd_labels(self, labels):
+        labels = np.array(labels) if type(labels) is not np.ndarray else labels
+        self.verify_evmd_labels(labels)
+        self.evmd_labels = labels
         
     def get_date(self):
         return self.data[:, 0]
@@ -309,7 +333,7 @@ class DemPile(object):
         # self.ts = [[{'date': [], 'uncertainty': [], 'value': []} for i in range(refgeo_Xsize)] for j in range(refgeo_Ysize)]
         # self.ts = [[ [] for i in range(refgeo_Xsize)] for j in range(refgeo_Ysize)]
         print('total number of pixels to be processed: {}'.format(np.sum(self.refgeomask)))
-
+        
     def ReadConfig(self, ini):
         if type(ini) is str:
             ini = ConfParams(ini)
@@ -446,9 +470,9 @@ class DemPile(object):
                 uncertainty = self.ts[m, n].get_uncertainty()
                 value = self.ts[m, n].get_value()
                 if method == 'DBSCAN':
-                    exitstate, verified_y_labels = EVMD_DBSCAN(date, value, eps=self.evmd_threshold)
+                    exitstate, labels = EVMD_DBSCAN(date, value, eps=self.evmd_threshold)
                     if exitstate >= 0:
-                        verified_y_labels_idx = np.where(verified_y_labels)[0]
+                        verified_y_labels_idx = np.where(labels >= 0)[0]
                         if order == 'descending':
                             idx = verified_y_labels_idx[-1]
                         elif order == 'ascending':
@@ -477,7 +501,46 @@ class DemPile(object):
         mosaic_uncertainty = SingleRaster('{}_mosaic-{}_uncertainty.tif'.format(self.dhdtprefix, order))
         mosaic_value.Array2Raster(self.mosaic['value'], self.refgeo)
         mosaic_date.Array2Raster(self.mosaic['date'], self.refgeo)
-        mosaic_uncertainty.Array2Raster(self.mosaic['uncertainty'], self.refgeo)                
+        mosaic_uncertainty.Array2Raster(self.mosaic['uncertainty'], self.refgeo)
+        
+    @timeit
+    def do_evmd(self, parallel=True):
+        if parallel:
+            import dask
+            from dask.diagnostics import ProgressBar
+            def batch(seq):
+                sub_results = []
+                for x in seq:
+                    date = x.get_date()
+                    value = x.get_value()
+                    exitstate, labels = EVMD_DBSCAN(date, value, eps=self.evmd_threshold)
+                    sub_results.append(labels)
+                return sub_results
+            
+            batches = []
+            for m in range(self.ts.shape[0]):
+                result_batch = dask.delayed(batch)(self.ts[m, :])
+                batches.append(result_batch)
+                
+            with ProgressBar():
+                results = dask.compute(batches)
+            
+            for m in range(self.ts.shape[0]):
+                for n in range(self.ts.shape[1]):
+                    self.ts[m, n].add_evmd_labels(results[0][m][n])
+        else:
+            for m in range(self.ts.shape[0]):
+                self.display_progress(m, self.ts.shape[0])
+                for n in range(self.ts.shape[1]):
+                    date = self.ts[m, n].get_date()
+                    value = self.ts[m, n].get_value()
+                    exitstate, labels = EVMD_DBSCAN(date, value, eps=self.evmd_threshold)
+                    self.ts[m, n].add_evmd_labels(labels)
+                
+    @staticmethod                
+    def display_progress(m, total):
+        if m % 100 == 0:
+            print(f'{m}/{total} lines processed')
     
     def viz(self):
         dhdt_raster, _, _, _ = self.ShowDhdtTifs()
