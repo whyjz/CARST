@@ -18,6 +18,7 @@ from carst.libraster import SingleRaster
 import pickle
 import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
+from rasterio.errors import RasterioIOError
 
 def timeit(func):
     def time_wrapper(*args, **kwargs):
@@ -371,17 +372,17 @@ class DemPile(object):
             print('{}) {}'.format(i + 1, os.path.basename(self.dems[i].fpath) ))
             if self.dems[i].uncertainty <= self.maskparam['max_uncertainty']:
                 datedelta = self.dems[i].date - self.refdate
-                # znew = Resample_Array(self.dems[i], self.refgeo, resamp_method='linear')
-                znew = resample_array(self.dems[i], self.refgeo)
+                try:
+                    znew = resample_array(self.dems[i], self.refgeo)
+                except RasterioIOError as inst:    # To show and skip the error of a bad url
+                    print(inst)
+                    continue
                 znew_mask = np.logical_and(znew > 0, self.refgeomask)
                 fill_idx = np.where(znew_mask)
                 for m,n in zip(fill_idx[0], fill_idx[1]):
                     record = [datedelta.days, znew[m, n], self.dems[i].uncertainty]
-                    # self.ts[m, n].add_record(record)
                     ts[m][n] += [record]
-                    # self.ts[m][n]['date'] += [datedelta.days]
-                    # self.ts[m][n]['uncertainty'] += [self.dems[i].uncertainty]
-                    # self.ts[m][n]['value'] += [znew[m, n]]
+
             else:
                 print("This one won't be piled up because its uncertainty ({}) exceeds the maximum uncertainty allowed ({})."
                       .format(self.dems[i].uncertainty, self.maskparam['max_uncertainty']))
