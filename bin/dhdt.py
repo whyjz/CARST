@@ -30,34 +30,30 @@ args = parser.parse_args()
 # ==== Read ini file ====
 
 inipath = args.config_file
-# ini = ConfParams(inipath)
-# ini.ReadParam()
-# ini.VerifyParam()
 
 # ==== Create a DemPile object and load the config file into the object ====
 
 a = DemPile()
-# a.ReadConfig(ini)
-a.ReadConfig(inipath)
+a.read_config(inipath)
 
 # ==== Run main processes ====
 
 if args.step is None:
-    a.InitTS()
-    a.PileUp()
-    a.DumpPickle()
-    a.Polyfit()
-    a.Fitdata2File()
+    a.init_ts()
+    a.pileup()
+    a.dump_pickle()
+    a.polyfit()
+    a.fitdata2file()
 elif args.step == 'stack':
-    a.InitTS()
-    a.PileUp()
-    a.DumpPickle()
+    a.init_ts()
+    a.pileup()
+    a.dump_pickle()
 elif args.step == 'dhdt':
-    a.LoadPickle()
-    a.Polyfit()
-    a.Fitdata2File()
+    a.load_pickle()
+    a.polyfit()
+    a.fitdata2file()
 elif args.step == 'viewts':
-    a.LoadPickle()
+    a.load_pickle()
     a.viz()
     plt.show()
 #     data = a.ts

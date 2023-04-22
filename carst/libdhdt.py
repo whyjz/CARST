@@ -13,10 +13,6 @@ except ImportError:
     import gdal    # this was used until GDAL 3.1
 from datetime import datetime
 from shapely.geometry import Polygon
-# from scipy.interpolate import interp2d
-# from scipy.interpolate import NearestNDInterpolator
-# from scipy.interpolate import griddata
-# import gc
 from carst import ConfParams
 from carst.libraster import SingleRaster
 import pickle
@@ -303,7 +299,7 @@ class DemPile(object):
         self.maskparam = {'max_uncertainty': 9999, 'min_time_span': 0}
         self.evmd_threshold = evmd_threshold
 
-    def AddDEM(self, dems):
+    def add_dem(self, dems):
         # ==== Add DEM object list ====
         if type(dems) is list:
             self.dems = self.dems + dems
@@ -312,13 +308,13 @@ class DemPile(object):
         else:
             raise ValueError("This DEM type is neither a SingleRaster object nor a list of SingleRaster objects.")
 
-    def SortByDate(self):
+    def sort_by_date(self):
         # ==== sort DEMs by date (ascending order) ====
         dem_dates = [i.date for i in self.dems]
         dateidx = np.argsort(dem_dates)
         self.dems = [self.dems[i] for i in dateidx]
 
-    def SetRefGeo(self, refgeo):
+    def set_refgeo(self, refgeo):
         # ==== Prepare the reference geometry ====
         if type(refgeo) is str:
             self.refgeo = SingleRaster(refgeo)
@@ -328,20 +324,20 @@ class DemPile(object):
             raise ValueError("This refgeo must be either a SingleRaster object or a path to a geotiff file.")
         self.refgeomask = self.refgeo.ReadAsArray().astype(bool)
 
-    def SetRefDate(self, datestr):
+    def set_refdate(self, datestr):
         self.refdate = datetime.strptime(datestr, '%Y-%m-%d')
 
-    def SetMaskParam(self, ini):
+    def set_mask_params(self, ini):
         if 'max_uncertainty' in ini.settings:
             self.maskparam['max_uncertainty'] = float(ini.settings['max_uncertainty'])
         if 'min_time_span' in ini.settings:
             self.maskparam['min_time_span'] = float(ini.settings['min_time_span'])
 
-    def SetEVMDThreshold(self, ini):
+    def set_evmd_threshold(self, ini):
         if 'evmd_threshold' in ini.regression:
             self.evmd_threshold = float(ini.regression['evmd_threshold'])
 
-    def InitTS(self):
+    def init_ts(self):
         # ==== Prepare the reference geometry ====
         refgeo_Ysize = self.refgeo.get_y_size()
         refgeo_Xsize = self.refgeo.get_x_size()
@@ -353,22 +349,22 @@ class DemPile(object):
         # self.ts = [[ [] for i in range(refgeo_Xsize)] for j in range(refgeo_Ysize)]
         print('total number of pixels to be processed: {}'.format(np.sum(self.refgeomask)))
         
-    def ReadConfig(self, ini):
+    def read_config(self, ini):
         if type(ini) is str:
             ini = ConfParams(ini)
             ini.ReadParam()
             ini.VerifyParam()
         self.picklepath = ini.result['picklefile']
         self.dhdtprefix = ini.result['dhdt_prefix']
-        self.AddDEM(ini.GetDEM())
-        self.SortByDate()
-        self.SetRefGeo(ini.refgeometry['gtiff'])
-        self.SetRefDate(ini.settings['refdate'])
-        self.SetMaskParam(ini)
-        self.SetEVMDThreshold(ini)
+        self.add_dem(ini.GetDEM())
+        self.sort_by_date()
+        self.set_refgeo(ini.refgeometry['gtiff'])
+        self.set_refdate(ini.settings['refdate'])
+        self.set_mask_params(ini)
+        self.set_evmd_threshold(ini)
 
     @timeit
-    def PileUp(self):
+    def pileup(self):
         # ==== Start to read every DEM and save it to our final array ====
         ts = [[ [] for n in range(self.ts.shape[1])] for m in range(self.ts.shape[0])]
         for i in range(len(self.dems)):
@@ -395,21 +391,21 @@ class DemPile(object):
             for n in range(self.ts.shape[1]):
                 self.ts[m, n] = PixelTimeSeries(ts[m][n])
                 
-    def DumpPickle(self):
+    def dump_pickle(self):
         pickle.dump(self.ts, open(self.picklepath, "wb"))
 
-    def LoadPickle(self):
+    def load_pickle(self):
         self.ts = pickle.load( open(self.picklepath, "rb") )
         
     def init_fitdata(self):
         # ==== Create final array ====
-        self.fitdata['slope']     = np.full_like(self.ts, self.refgeo.get_nodata())
-        self.fitdata['slope_err'] = np.full_like(self.ts, self.refgeo.get_nodata())
-        self.fitdata['residual']  = np.full_like(self.ts, self.refgeo.get_nodata())
-        self.fitdata['count']     = np.full_like(self.ts, self.refgeo.get_nodata())
+        self.fitdata['slope']     = np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
+        self.fitdata['slope_err'] = np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
+        self.fitdata['residual']  = np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
+        self.fitdata['count']     = np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
         
     @timeit
-    def Polyfit(self, parallel=False):
+    def polyfit(self, parallel=False):
         # ==== Create final array ====
         self.init_fitdata()
         # ==== Weighted regression ====
@@ -460,7 +456,7 @@ class DemPile(object):
                         self.fitdata['residual'][m, n] = residual
                         self.fitdata['count'][m, n] = count
 
-    def Fitdata2File(self):
+    def fitdata2file(self):
         # ==== Write to file ====
         dhdt_dem = SingleRaster(self.dhdtprefix + '_dhdt.tif')
         dhdt_error = SingleRaster(self.dhdtprefix + '_dhdt_error.tif')
@@ -471,7 +467,7 @@ class DemPile(object):
         dhdt_res.Array2Raster(self.fitdata['residual'], self.refgeo)
         dhdt_count.Array2Raster(self.fitdata['count'], self.refgeo)
 
-    def ShowDhdtTifs(self):
+    def show_dhdt_tifs(self):
         dhdt_dem = SingleRaster(self.dhdtprefix + '_dhdt.tif')
         dhdt_error = SingleRaster(self.dhdtprefix + '_dhdt_error.tif')
         dhdt_res = SingleRaster(self.dhdtprefix + '_dhdt_residual.tif')
@@ -568,7 +564,7 @@ class DemPile(object):
             print(f'{m}/{total} lines processed')
     
     def viz(self):
-        dhdt_raster, _, _, _ = self.ShowDhdtTifs()
+        dhdt_raster, _, _, _ = self.show_dhdt_tifs()
         img = dhdt_raster.ReadAsArray()
         img[img < -9000] = np.nan   # might need to change
         
