@@ -411,22 +411,23 @@ class DemPile(object):
         self.init_fitdata()
         # ==== Weighted regression ====
         if parallel:
-            print('sds')
             import dask
             from dask.diagnostics import ProgressBar
-            def batch(seq):
+            def batch(seq, min_time_span, evmd_threshold, nodata):
                 sub_results = []
                 for x in seq:
                     date = x.get_date()
-                    if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
-                        single_results = x.do_wlr(evmd_threshold=self.evmd_threshold)
+                    if date.size >= 2 and date[-1] - date[0] > min_time_span:
+                        single_results = x.do_wlr(evmd_threshold=evmd_threshold)
                         # single_results is (slope, slope_err, residual, count)
+                    else:
+                        single_results = (nodata, nodata, nodata, nodata)
                     sub_results.append(single_results)
                 return sub_results
             
             batches = []
             for m in range(self.ts.shape[0]):
-                result_batch = dask.delayed(batch)(self.ts[m, :])
+                result_batch = dask.delayed(batch)(self.ts[m, :], self.maskparam['min_time_span'], self.evmd_threshold, self.refgeo.get_nodata())
                 batches.append(result_batch)
                 
             with ProgressBar():
@@ -533,16 +534,16 @@ class DemPile(object):
         if parallel:
             import dask
             from dask.diagnostics import ProgressBar
-            def batch(seq):
+            def batch(seq, evmd_threshold):
                 sub_results = []
                 for x in seq:
-                    exitstate, labels = x.do_evmd(eps=self.evmd_threshold)
+                    exitstate, labels = x.do_evmd(eps=evmd_threshold)
                     sub_results.append(labels)
                 return sub_results
             
             batches = []
             for m in range(self.ts.shape[0]):
-                result_batch = dask.delayed(batch)(self.ts[m, :])
+                result_batch = dask.delayed(batch)(self.ts[m, :], self.evmd_threshold)
                 batches.append(result_batch)
                 
             with ProgressBar():
