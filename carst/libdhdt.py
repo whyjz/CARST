@@ -1,7 +1,7 @@
 # Class: PixelTimeSeries, DemPile
 # Func: timeit, resample_array, EVMD group, wlr_corefun, onclick_ipynb
 # by Whyjay Zheng, Jul 27 2016
-# last edit: Apr 17 2023
+# last edit: Apr 23 2023
 
 import numpy as np
 from numpy.linalg import inv
@@ -80,7 +80,7 @@ def EVMD_DBSCAN(x, y, eps=6, min_samples=4):
         # verified_y_labels = db.labels_ >= 0
         verified_y_labels = db.labels_
         # verified_y_labels_idx = np.where(verified_y_labels)
-        if any(verified_y_labels):
+        if any(verified_y_labels >= 0):
             exitstate = 1
         else:
             exitstate = -1
@@ -405,6 +405,11 @@ class DemPile(object):
         self.fitdata['residual']  = np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
         self.fitdata['count']     = np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
         
+    def init_mosaic(self):
+        self.mosaic['value']      = np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
+        self.mosaic['date']       = np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
+        self.mosaic['uncertainty']= np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
+        
     @timeit
     def polyfit(self, parallel=False):
         # ==== Create final array ====
@@ -477,7 +482,7 @@ class DemPile(object):
         return dhdt_dem, dhdt_error, dhdt_res, dhdt_count
     
     @timeit
-    def form_mosaic(self, order='ascending', method='DBSCAN'):
+    def form_mosaic(self, order='ascending', method='DBSCAN', parallel=False):
         """
         order options:
             ascending: early elevations will be populated first
@@ -485,19 +490,19 @@ class DemPile(object):
         method: 'DBSCAN' or 'legacy'
         """
         # ==== Create mosaicked array ====
-        self.mosaic['value']           = np.full_like(self.ts, np.nan, dtype=float)
-        self.mosaic['date']            = np.full_like(self.ts, np.nan, dtype=float)
-        self.mosaic['uncertainty']     = np.full_like(self.ts, np.nan, dtype=float)
+        self.init_mosaic()
+        if method == 'DBSCAN' and self.ts[0, 0].evmd_labels is None:
+            print('No EVMD labels detected. Run do_evmd first.')
+            self.do_evmd(parallel=parallel)
         for m in range(self.ts.shape[0]):
-            if m % 100 == 0:
-                print(m)
+            self.display_progress(m, self.ts.shape[0])
             for n in range(self.ts.shape[1]):
                 date = self.ts[m, n].get_date()
                 uncertainty = self.ts[m, n].get_uncertainty()
                 value = self.ts[m, n].get_value()
                 if method == 'DBSCAN':
-                    exitstate, labels = EVMD_DBSCAN(date, value, eps=self.evmd_threshold)
-                    if exitstate >= 0:
+                    labels = self.ts[m, n].evmd_labels
+                    if any(labels >= 0):
                         verified_y_labels_idx = np.where(labels >= 0)[0]
                         if order == 'descending':
                             idx = verified_y_labels_idx[-1]
@@ -565,13 +570,18 @@ class DemPile(object):
         if m % 100 == 0:
             print(f'{m}/{total} lines processed')
     
-    def viz(self):
+    def viz(self, figsize=(8,8), clim=(-6, 6)):
         dhdt_raster, _, _, _ = self.show_dhdt_tifs()
+        try:
+            nodata = dhdt_raster.get_nodata()
+        except RasterioIOError:
+            print(f'No such file: {dhdt_raster.fname} -- We recommend to run polyfit first.')
+            print('TBD')
         img = dhdt_raster.ReadAsArray()
-        img[img < -9000] = np.nan   # might need to change
+        img[img == nodata] = np.nan
         
-        fig, axs = plt.subplots(2, 1, figsize=(8,8))                   # figsize might need to change
-        first_img = axs[0].imshow(img, cmap='RdBu', vmin=-6, vmax=6)   # minmax might need to change
+        fig, axs = plt.subplots(2, 1, figsize=figsize)                 
+        first_img = axs[0].imshow(img, cmap='RdBu', vmin=clim[0], vmax=clim[1])
         
         onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold)
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
