@@ -411,7 +411,7 @@ class DemPile(object):
         self.mosaic['uncertainty']= np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
         
     @timeit
-    def polyfit(self, parallel=False):
+    def polyfit(self, parallel=False, chunksize=(1000, 1000)):
         # ==== Create final array ====
         self.init_fitdata()
         # ==== Weighted regression ====
@@ -430,20 +430,52 @@ class DemPile(object):
                     sub_results.append(single_results)
                 return sub_results
             
-            batches = []
-            for m in range(self.ts.shape[0]):
-                result_batch = dask.delayed(batch)(self.ts[m, :], self.maskparam['min_time_span'], self.evmd_threshold, self.refgeo.get_nodata())
-                batches.append(result_batch)
+            if self.ts.shape[0] <= chunksize[0] and self.ts.shape[1] <= chunksize[1]:
+                ### Single chunk
+                batches = []
+                for m in range(self.ts.shape[0]):
+                    result_batch = dask.delayed(batch)(self.ts[m, :], self.maskparam['min_time_span'], self.evmd_threshold, self.refgeo.get_nodata())
+                    batches.append(result_batch)
+
+                with ProgressBar():
+                    results = dask.compute(batches)
+
+                for m in range(self.ts.shape[0]):
+                    for n in range(self.ts.shape[1]):
+                        self.fitdata['slope'][m, n] = results[0][m][n][0]
+                        self.fitdata['slope_err'][m, n] = results[0][m][n][1]
+                        self.fitdata['residual'][m, n] = results[0][m][n][2]
+                        self.fitdata['count'][m, n] = results[0][m][n][3]
+                        
+            else:
+                ### Multiple chunks
+                msize = chunksize[0]
+                nsize = chunksize[1]
+                m_nodes = np.arange(0, self.ts.shape[0], msize)
+                n_nodes = np.arange(0, self.ts.shape[1], nsize)
+                super_results = []
+                for super_m in range(m_nodes.size):
+                    batches = []
+                    ts_slice = self.ts[m_nodes[super_m]:m_nodes[super_m]+msize, :]
+                    for m in range(ts_slice.shape[0]):
+                        for n in range(n_nodes.size):
+                            result_batch = dask.delayed(batch)(ts_slice[m, n_nodes[n]:n_nodes[n]+nsize ], self.maskparam['min_time_span'], self.evmd_threshold, self.refgeo.get_nodata())
+                            batches.append(result_batch)
+                            
+                    with ProgressBar():
+                        results = dask.compute(batches)
+                    super_results.append(results[0])
+
+                for m in range(self.ts.shape[0]):
+                    for n in range(self.ts.shape[1]):
+                        idx1 = m // msize
+                        idx2 = n_nodes.size * (m % msize) + n // nsize
+                        idx3 = n % nsize
+                        self.fitdata['slope'][m, n] = super_results[idx1][idx2][idx3][0]
+                        self.fitdata['slope_err'][m, n] = super_results[idx1][idx2][idx3][1]
+                        self.fitdata['residual'][m, n] = super_results[idx1][idx2][idx3][2]
+                        self.fitdata['count'][m, n] = super_results[idx1][idx2][idx3][3]
                 
-            with ProgressBar():
-                results = dask.compute(batches)
-            
-            for m in range(self.ts.shape[0]):
-                for n in range(self.ts.shape[1]):
-                    self.fitdata['slope'][m, n] = results[0][m][n][0]
-                    self.fitdata['slope_err'][m, n] = results[0][m][n][1]
-                    self.fitdata['residual'][m, n] = results[0][m][n][2]
-                    self.fitdata['count'][m, n] = results[0][m][n][3]
 
         else:
             for m in range(self.ts.shape[0]):
@@ -535,7 +567,7 @@ class DemPile(object):
         mosaic_uncertainty.Array2Raster(self.mosaic['uncertainty'], self.refgeo)
         
     @timeit
-    def do_evmd(self, parallel=False):
+    def do_evmd(self, parallel=False, chunksize=(1000, 1000)):
         if parallel:
             import dask
             from dask.diagnostics import ProgressBar
@@ -546,17 +578,44 @@ class DemPile(object):
                     sub_results.append(labels)
                 return sub_results
             
-            batches = []
-            for m in range(self.ts.shape[0]):
-                result_batch = dask.delayed(batch)(self.ts[m, :], self.evmd_threshold)
-                batches.append(result_batch)
-                
-            with ProgressBar():
-                results = dask.compute(batches)
-            
-            for m in range(self.ts.shape[0]):
-                for n in range(self.ts.shape[1]):
-                    self.ts[m, n].add_evmd_labels(results[0][m][n])
+            if self.ts.shape[0] <= chunksize[0] and self.ts.shape[1] <= chunksize[1]:
+                ### Single chunk
+                batches = []
+                for m in range(self.ts.shape[0]):
+                    result_batch = dask.delayed(batch)(self.ts[m, :], self.evmd_threshold)
+                    batches.append(result_batch)
+
+                with ProgressBar():
+                    results = dask.compute(batches)
+
+                for m in range(self.ts.shape[0]):
+                    for n in range(self.ts.shape[1]):
+                        self.ts[m, n].add_evmd_labels(results[0][m][n])
+            else:
+                ### Multile chunks
+                msize = chunksize[0]
+                nsize = chunksize[1]
+                m_nodes = np.arange(0, self.ts.shape[0], msize)
+                n_nodes = np.arange(0, self.ts.shape[1], nsize)
+                super_results = []
+                for super_m in range(m_nodes.size):
+                    batches = []
+                    ts_slice = self.ts[m_nodes[super_m]:m_nodes[super_m]+msize, :]
+                    for m in range(ts_slice.shape[0]):
+                        for n in range(n_nodes.size):
+                            result_batch = dask.delayed(batch)(ts_slice[m, n_nodes[n]:n_nodes[n]+nsize ], self.evmd_threshold)
+                            batches.append(result_batch)
+                            
+                    with ProgressBar():
+                        results = dask.compute(batches)
+                    super_results.append(results[0])
+
+                for m in range(self.ts.shape[0]):
+                    for n in range(self.ts.shape[1]):
+                        idx1 = m // msize
+                        idx2 = n_nodes.size * (m % msize) + n // nsize
+                        idx3 = n % nsize
+                        self.ts[m, n].add_evmd_labels(super_results[idx1][idx2][idx3])
         else:
             for m in range(self.ts.shape[0]):
                 self.display_progress(m, self.ts.shape[0])
