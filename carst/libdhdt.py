@@ -142,11 +142,11 @@ def EVMD_idx(y, validated_value, threshold=6):
             validated_range = [min(tmp), max(tmp)]
     return idx
 
-def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False):
+def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, min_samples=4):
     # wlr = weighted linear regression.
     # exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
     if evmd_labels is None:
-        exitstate, evmd_labels = EVMD_DBSCAN(x, y, eps=evmd_threshold)
+        exitstate, evmd_labels = EVMD_DBSCAN(x, y, eps=evmd_threshold, min_samples=min_samples)
     else:
         exitstate = 1 if any(evmd_labels >= 0) else -1
         
@@ -259,18 +259,18 @@ class PixelTimeSeries(object):
         self.verify_evmd_labels(labels)
         self.evmd_labels = labels
         
-    def do_evmd(self, eps=6):
+    def do_evmd(self, eps=6, min_samples=4):
         date = self.get_date()
         value = self.get_value()
-        exitstate, labels = EVMD_DBSCAN(date, value, eps=eps)
+        exitstate, labels = EVMD_DBSCAN(date, value, eps=eps, min_samples=min_samples)
         return exitstate, labels
     
-    def do_wlr(self, evmd_threshold=6):
+    def do_wlr(self, evmd_threshold=6, min_samples=4):
         date = self.get_date()
         value = self.get_value()
         uncertainty = self.get_uncertainty()
         evmd_labels = self.evmd_labels
-        single_results = wlr_corefun(date, value, uncertainty, evmd_labels=evmd_labels, evmd_threshold=evmd_threshold)
+        single_results = wlr_corefun(date, value, uncertainty, evmd_labels=evmd_labels, evmd_threshold=evmd_threshold, min_samples=min_samples)
         # single_results is (slope, slope_err, residual, count)
         return single_results
 
@@ -411,19 +411,19 @@ class DemPile(object):
         self.mosaic['uncertainty']= np.full_like(self.ts, self.refgeo.get_nodata(), dtype=float)
         
     @timeit
-    def polyfit(self, parallel=False, chunksize=(1000, 1000)):
+    def polyfit(self, parallel=False, chunksize=(1000, 1000), min_samples=4):
         # ==== Create final array ====
         self.init_fitdata()
         # ==== Weighted regression ====
         if parallel:
             import dask
             from dask.diagnostics import ProgressBar
-            def batch(seq, min_time_span, evmd_threshold, nodata):
+            def batch(seq, min_time_span, evmd_threshold, nodata, min_samples):
                 sub_results = []
                 for x in seq:
                     date = x.get_date()
                     if date.size >= 2 and date[-1] - date[0] > min_time_span:
-                        single_results = x.do_wlr(evmd_threshold=evmd_threshold)
+                        single_results = x.do_wlr(evmd_threshold=evmd_threshold, min_samples=min_samples)
                         # single_results is (slope, slope_err, residual, count)
                     else:
                         single_results = (nodata, nodata, nodata, nodata)
@@ -434,7 +434,7 @@ class DemPile(object):
                 ### Single chunk
                 batches = []
                 for m in range(self.ts.shape[0]):
-                    result_batch = dask.delayed(batch)(self.ts[m, :], self.maskparam['min_time_span'], self.evmd_threshold, self.refgeo.get_nodata())
+                    result_batch = dask.delayed(batch)(self.ts[m, :], self.maskparam['min_time_span'], self.evmd_threshold, self.refgeo.get_nodata(), min_samples)
                     batches.append(result_batch)
 
                 with ProgressBar():
@@ -460,7 +460,7 @@ class DemPile(object):
                     ts_slice = self.ts[m_nodes[super_m]:m_nodes[super_m]+msize, :]
                     for m in range(ts_slice.shape[0]):
                         for n in range(n_nodes.size):
-                            result_batch = dask.delayed(batch)(ts_slice[m, n_nodes[n]:n_nodes[n]+nsize ], self.maskparam['min_time_span'], self.evmd_threshold, self.refgeo.get_nodata())
+                            result_batch = dask.delayed(batch)(ts_slice[m, n_nodes[n]:n_nodes[n]+nsize ], self.maskparam['min_time_span'], self.evmd_threshold, self.refgeo.get_nodata(), min_samples)
                             batches.append(result_batch)
                             
                     with ProgressBar():
@@ -488,7 +488,7 @@ class DemPile(object):
                     # evmd_labels = self.ts[m, n].evmd_labels
 
                     if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
-                        slope, slope_err, residual, count = self.ts[m, n].do_wlr(evmd_threshold=self.evmd_threshold)
+                        slope, slope_err, residual, count = self.ts[m, n].do_wlr(evmd_threshold=self.evmd_threshold, min_samples=min_samples)
                         # if residual > 100:
                         #    print(date, value, uncertainty)
                         self.fitdata['slope'][m, n] = slope
@@ -515,7 +515,7 @@ class DemPile(object):
         return dhdt_dem, dhdt_error, dhdt_res, dhdt_count
     
     @timeit
-    def form_mosaic(self, order='ascending', method='DBSCAN', parallel=False):
+    def form_mosaic(self, order='ascending', method='DBSCAN', parallel=False, min_samples=4):
         """
         order options:
             ascending: early elevations will be populated first
@@ -526,7 +526,7 @@ class DemPile(object):
         self.init_mosaic()
         if method == 'DBSCAN' and self.ts[0, 0].evmd_labels is None:
             print('No EVMD labels detected. Run do_evmd first.')
-            self.do_evmd(parallel=parallel)
+            self.do_evmd(parallel=parallel, min_samples=min_samples)
         for m in range(self.ts.shape[0]):
             self.display_progress(m, self.ts.shape[0])
             for n in range(self.ts.shape[1]):
@@ -568,14 +568,14 @@ class DemPile(object):
         mosaic_uncertainty.Array2Raster(self.mosaic['uncertainty'], self.refgeo)
         
     @timeit
-    def do_evmd(self, parallel=False, chunksize=(1000, 1000)):
+    def do_evmd(self, parallel=False, chunksize=(1000, 1000), min_samples=4):
         if parallel:
             import dask
             from dask.diagnostics import ProgressBar
-            def batch(seq, evmd_threshold):
+            def batch(seq, evmd_threshold, min_samples):
                 sub_results = []
                 for x in seq:
-                    exitstate, labels = x.do_evmd(eps=evmd_threshold)
+                    exitstate, labels = x.do_evmd(eps=evmd_threshold, min_samples=min_samples)
                     sub_results.append(labels)
                 return sub_results
             
@@ -583,7 +583,7 @@ class DemPile(object):
                 ### Single chunk
                 batches = []
                 for m in range(self.ts.shape[0]):
-                    result_batch = dask.delayed(batch)(self.ts[m, :], self.evmd_threshold)
+                    result_batch = dask.delayed(batch)(self.ts[m, :], self.evmd_threshold, min_samples)
                     batches.append(result_batch)
 
                 with ProgressBar():
@@ -605,7 +605,7 @@ class DemPile(object):
                     ts_slice = self.ts[m_nodes[super_m]:m_nodes[super_m]+msize, :]
                     for m in range(ts_slice.shape[0]):
                         for n in range(n_nodes.size):
-                            result_batch = dask.delayed(batch)(ts_slice[m, n_nodes[n]:n_nodes[n]+nsize ], self.evmd_threshold)
+                            result_batch = dask.delayed(batch)(ts_slice[m, n_nodes[n]:n_nodes[n]+nsize ], self.evmd_threshold, min_samples)
                             batches.append(result_batch)
                             
                     with ProgressBar():
@@ -622,7 +622,7 @@ class DemPile(object):
             for m in range(self.ts.shape[0]):
                 self.display_progress(m, self.ts.shape[0])
                 for n in range(self.ts.shape[1]):
-                    exitstate, labels = self.ts[m, n].do_evmd(eps=self.evmd_threshold)
+                    exitstate, labels = self.ts[m, n].do_evmd(eps=self.evmd_threshold, min_samples=min_samples)
                     self.ts[m, n].add_evmd_labels(labels)
                     
                 
