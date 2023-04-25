@@ -455,6 +455,7 @@ class DemPile(object):
                 n_nodes = np.arange(0, self.ts.shape[1], nsize)
                 super_results = []
                 for super_m in range(m_nodes.size):
+                    self.display_progress(m_nodes[super_m], self.ts.shape[0])
                     batches = []
                     ts_slice = self.ts[m_nodes[super_m]:m_nodes[super_m]+msize, :]
                     for m in range(ts_slice.shape[0]):
@@ -599,6 +600,7 @@ class DemPile(object):
                 n_nodes = np.arange(0, self.ts.shape[1], nsize)
                 super_results = []
                 for super_m in range(m_nodes.size):
+                    self.display_progress(m_nodes[super_m], self.ts.shape[0])
                     batches = []
                     ts_slice = self.ts[m_nodes[super_m]:m_nodes[super_m]+msize, :]
                     for m in range(ts_slice.shape[0]):
