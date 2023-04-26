@@ -154,7 +154,10 @@ def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, mi
     # if exitstate >= 0 or (max(x) - min(x)) < 1:
     if exitstate < 0 or (max(x) - min(x)) < 1:
         slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
-        return slope, slope_err, resid, count
+        if detailed:
+            return slope, slope_err, resid, count, np.array([]), np.array([]), np.array([])
+        else:
+            return slope, slope_err, resid, count
     else:
         # if x.size == 3:
         # print(x, y, ye)
