@@ -631,7 +631,7 @@ class DemPile(object):
         if m % 100 == 0:
             print(f'{m}/{total} lines processed')
     
-    def viz(self, figsize=(8,8), clim=(-6, 6)):
+    def viz(self, figsize=(8,8), clim=(-6, 6), min_samples=4):
         dhdt_raster, _, _, _ = self.show_dhdt_tifs()
         try:
             nodata = dhdt_raster.get_nodata()
@@ -644,10 +644,10 @@ class DemPile(object):
         fig, axs = plt.subplots(2, 1, figsize=figsize)                 
         first_img = axs[0].imshow(img, cmap='RdBu', vmin=clim[0], vmax=clim[1])
         
-        onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold)
+        onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples)
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
-def onclick_wrapper(data, axs, evmd_threshold):
+def onclick_wrapper(data, axs, evmd_threshold, min_samples=4):
     def onclick_ipynb(event):
         """
         Callback function for mouse click
@@ -661,7 +661,7 @@ def onclick_wrapper(data, axs, evmd_threshold):
             xx = data[row, col].get_date()
             yy = data[row, col].get_value()
             ye = data[row, col].get_uncertainty()
-            slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=evmd_threshold, detailed=True)   
+            slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=evmd_threshold, min_samples=min_samples, detailed=True)   
             SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
             SSRes = np.sum((y_good - y_goodest) ** 2)
             SST = np.sum((y_good - np.mean(y_good)) ** 2)
