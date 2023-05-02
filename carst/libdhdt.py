@@ -162,7 +162,7 @@ def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, mi
         # if x.size == 3:
         # print(x, y, ye)
         # idx = EVMD_idx(y, validated_value, threshold=evmd_threshold)
-        if sum(idx) >= 3 or (max(x[idx]) - min(x[idx])) < 1:
+        if sum(idx) >= 3 and (max(x[idx]) - min(x[idx])) > 1:
             x = x[idx]
             y = y[idx]
             ye = ye[idx]
