@@ -152,7 +152,7 @@ def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, mi
         
     idx = evmd_labels >= 0
     # if exitstate >= 0 or (max(x) - min(x)) < 1:
-    if exitstate < 0 or (max(x) - min(x)) < 1:
+    if exitstate < 0:
         slope, slope_err, resid, count = -9999.0, -9999.0, -9999.0, x.size
         if detailed:
             return slope, slope_err, resid, count, np.array([]), np.array([]), np.array([])
@@ -162,7 +162,7 @@ def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, mi
         # if x.size == 3:
         # print(x, y, ye)
         # idx = EVMD_idx(y, validated_value, threshold=evmd_threshold)
-        if sum(idx) >= 3:
+        if sum(idx) >= 3 or (max(x[idx]) - min(x[idx])) < 1:
             x = x[idx]
             y = y[idx]
             ye = ye[idx]
