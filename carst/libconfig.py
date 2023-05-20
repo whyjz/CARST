@@ -245,7 +245,7 @@ class ConfParams:
             return csv.GetDEM()
         else:
             print('Warning: No DEM-list file is given. Nothing will run.')
-            return [    
+            return []
 
     def GetImgPair(self, delimiter=','):
 
