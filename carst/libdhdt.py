@@ -145,6 +145,7 @@ def EVMD_idx(y, validated_value, threshold=6):
 def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, min_samples=4):
     # wlr = weighted linear regression.
     # exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
+    # WARNING issue: count does not represent the same meaning in the following if-else statement!!!
     if evmd_labels is None:
         exitstate, evmd_labels = EVMD_DBSCAN(x, y, eps=evmd_threshold, min_samples=min_samples)
     else:
