@@ -30,46 +30,45 @@ args = parser.parse_args()
 # ==== Read ini file ====
 
 inipath = args.config_file
-ini = ConfParams(inipath)
-ini.ReadParam()
-ini.VerifyParam()
 
 # ==== Create a DemPile object and load the config file into the object ====
 
 a = DemPile()
-a.ReadConfig(ini)
+a.read_config(inipath)
 
 # ==== Run main processes ====
 
 if args.step is None:
-	a.InitTS()
-	a.PileUp()
-	a.DumpPickle()
-	a.Polyfit()
-	a.Fitdata2File()
+    a.init_ts()
+    a.pileup()
+    a.dump_pickle()
+    a.polyfit()
+    a.fitdata2file()
 elif args.step == 'stack':
-	a.InitTS()
-	a.PileUp()
-	a.DumpPickle()
+    a.init_ts()
+    a.pileup()
+    a.dump_pickle()
 elif args.step == 'dhdt':
-	a.LoadPickle()
-	a.Polyfit()
-	a.Fitdata2File()
+    a.load_pickle()
+    a.polyfit()
+    a.fitdata2file()
 elif args.step == 'viewts':
-	a.LoadPickle()
-	data = a.ts
-	dhdt_raster, _, _, _ = a.ShowDhdtTifs()
-	img = dhdt_raster.ReadAsArray()
+    a.load_pickle()
+    a.viz()
+    plt.show()
+#     data = a.ts
+#     dhdt_raster, _, _, _ = a.ShowDhdtTifs()
+#     img = dhdt_raster.ReadAsArray()
 
-	fig, ax = plt.subplots()
-	img[img < -9000] = np.nan
-	ax.imshow(img, cmap='RdBu', vmin=-6, vmax=6)
-	onclick = onclick_wrapper(data, fig, ax)
+#     fig, ax = plt.subplots()
+#     img[img < -9000] = np.nan
+#     ax.imshow(img, cmap='RdBu', vmin=-6, vmax=6)
+#     onclick = onclick_wrapper(data, fig, ax)
 
-	cid = fig.canvas.mpl_connect('button_press_event', onclick)
-	plt.show()
+#     cid = fig.canvas.mpl_connect('button_press_event', onclick)
+
 else:
-	print('Wrong Way!')
+    print('Wrong Way!')
 
 
 # ==== Codes for test ====
