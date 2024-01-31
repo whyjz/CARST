@@ -142,7 +142,7 @@ def EVMD_idx(y, validated_value, threshold=6):
             validated_range = [min(tmp), max(tmp)]
     return idx
 
-def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, min_samples=4):
+def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, min_samples=4, min_time_span=365):
     # wlr = weighted linear regression.
     # exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
     # WARNING issue: count does not represent the same meaning in the following if-else statement!!!
@@ -163,7 +163,7 @@ def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, mi
         # if x.size == 3:
         # print(x, y, ye)
         # idx = EVMD_idx(y, validated_value, threshold=evmd_threshold)
-        if sum(idx) >= 3 and (max(x[idx]) - min(x[idx])) > 1:
+        if sum(idx) >= 3 and (max(x[idx]) - min(x[idx])) > min_time_span:
             x = x[idx]
             y = y[idx]
             ye = ye[idx]
@@ -208,35 +208,41 @@ class PixelTimeSeries(object):
     Column 1: date
     Column 2: value
     Column 3: uncertainty
+    Column 4: # of DEM that links to the value (indexed by the input DEM list)
     EVMD labels are also stored in this object.
+    Bitmask labels (if any, only for the ArcticDEM data set) are stored in this object.
     """
     def __init__(self, data=[]):
-        data = np.ndarray([0, 3]) if not data else data                      # [] --> np.ndarray([0, 3])
-        data = np.array(data) if type(data) is not np.ndarray else data      # [1, 2, 3] --> np.array([1, 2, 3])
+        data = np.ndarray([0, 4]) if not data else data                      # [] --> np.ndarray([0, 4])
+        data = np.array(data) if type(data) is not np.ndarray else data      # [1, 2, 3, 4] --> np.array([1, 2, 3, 4])
         self.verify_record(data)
-        self.data = data
+        self._data = data
         self.evmd_labels = None
+        self.bitmask_labels = None
 
     def __repr__(self):
-        return 'PixelTimeSeries({})'.format(self.data)
+        return 'PixelTimeSeries({})'.format(self._data)
     
     def get_date(self):
-        return self.data[:, 0]
+        return self._data[:, 0]
     
     def get_value(self):
-        return self.data[:, 1]
+        return self._data[:, 1]
     
     def get_uncertainty(self):
-        return self.data[:, 2]
+        return self._data[:, 2]
+    
+    def get_demno(self):
+        return self._data[:, 3]
     
     @staticmethod
     def verify_record(record):
         """
         Verify if the input record meets the format requirements.
         """
-        if record.ndim == 1 and record.size == 3:
+        if record.ndim == 1 and record.size == 4:
             pass
-        elif record.ndim == 2 and record.shape[1] == 3:
+        elif record.ndim == 2 and record.shape[1] == 4:
             pass
         else:
             raise ValueError("Inconsistent input record. Must be an n-by-3 array.")
@@ -247,13 +253,13 @@ class PixelTimeSeries(object):
         """
         record = np.array(record) if type(record) is not np.ndarray else record
         self.verify_record(record)
-        self.data = np.vstack((self.data, record))
+        self._data = np.vstack((self._data, record))
         
     def verify_evmd_labels(self, labels):
         """
         Verify if the input EVMD labels meet the format requirements.
         """
-        if labels.size == self.data.shape[0]:
+        if labels.size == self._data.shape[0]:
             pass
         else:
             raise ValueError("Inconsistent EVMD label input. Must be n labels where n = data points in the data.")
@@ -263,18 +269,33 @@ class PixelTimeSeries(object):
         self.verify_evmd_labels(labels)
         self.evmd_labels = labels
         
+    def verify_bitmask_labels(self, labels):
+        """
+        Verify if the input bitmask labels meet the format requirements.
+        """
+        if labels.size == self._data.shape[0]:
+            pass
+        else:
+            raise ValueError("Inconsistent bitmask label input. Must be n labels where n = data points in the data.")
+            
+    def add_bitmask_labels(self, labels):
+        labels = np.array(labels) if type(labels) is not np.ndarray else labels
+        self.verify_bitmask_labels(labels)
+        self.bitmask_labels = labels
+        
     def do_evmd(self, eps=6, min_samples=4):
         date = self.get_date()
         value = self.get_value()
         exitstate, labels = EVMD_DBSCAN(date, value, eps=eps, min_samples=min_samples)
         return exitstate, labels
     
-    def do_wlr(self, evmd_threshold=6, min_samples=4):
+    def do_wlr(self, evmd_threshold=6, min_samples=4, min_time_span=365):
         date = self.get_date()
         value = self.get_value()
         uncertainty = self.get_uncertainty()
         evmd_labels = self.evmd_labels
-        single_results = wlr_corefun(date, value, uncertainty, evmd_labels=evmd_labels, evmd_threshold=evmd_threshold, min_samples=min_samples)
+        
+        single_results = wlr_corefun(date, value, uncertainty, evmd_labels=evmd_labels, evmd_threshold=evmd_threshold, min_samples=min_samples, min_time_span=min_time_span)
         # single_results is (slope, slope_err, residual, count)
         return single_results
 
@@ -369,23 +390,36 @@ class DemPile(object):
         self.set_evmd_threshold(ini)
 
     @timeit
-    def pileup(self):
+    def pileup(self, bitmask=False):
         # ==== Start to read every DEM and save it to our final array ====
         ts = [[ [] for n in range(self.ts.shape[1])] for m in range(self.ts.shape[0])]
+        if bitmask:
+            ts_bitmask = [[ [] for n in range(self.ts.shape[1])] for m in range(self.ts.shape[0])]
+        
         for i in range(len(self.dems)):
             print('{}) {}'.format(i + 1, os.path.basename(self.dems[i].fpath) ))
             if self.dems[i].uncertainty <= self.maskparam['max_uncertainty']:
                 datedelta = self.dems[i].date - self.refdate
                 try:
-                    znew = resample_array(self.dems[i], self.refgeo)
+                    znew = resample_array(self.dems[i], self.refgeo, method='bilinear')
                 except RasterioIOError as inst:    # To show and skip the error of a bad url
                     print(inst)
                     continue
+                if bitmask:
+                    bitmask_fpath = self.dems[i].fpath.replace('dem.tif', 'bitmask.tif')
+                    bitmask_dem = SingleRaster(bitmask_fpath)
+                    bitmask_znew = resample_array(bitmask_dem, self.refgeo, method='nearest')
+                
+                ### Attempt to remove the znew > 0 constraint (failed for now; there is a lot of -9999 points) 
+                # znew_mask = self.refgeomask
                 znew_mask = np.logical_and(znew > 0, self.refgeomask)
                 fill_idx = np.where(znew_mask)
                 for m,n in zip(fill_idx[0], fill_idx[1]):
-                    record = [datedelta.days, znew[m, n], self.dems[i].uncertainty]
+                    record = [datedelta.days, znew[m, n], self.dems[i].uncertainty, i]
                     ts[m][n] += [record]
+                    if bitmask:
+                        record_bitmask = bitmask_znew[m, n]
+                        ts_bitmask[m][n] += [record_bitmask]
 
             else:
                 print("This one won't be piled up because its uncertainty ({}) exceeds the maximum uncertainty allowed ({})."
@@ -395,6 +429,8 @@ class DemPile(object):
         for m in range(self.ts.shape[0]):
             for n in range(self.ts.shape[1]):
                 self.ts[m, n] = PixelTimeSeries(ts[m][n])
+                if bitmask: 
+                    self.ts[m, n].add_bitmask_labels(ts_bitmask[m][n])
                 
     def dump_pickle(self):
         pickle.dump(self.ts, open(self.picklepath, "wb"))
@@ -492,7 +528,7 @@ class DemPile(object):
                     # evmd_labels = self.ts[m, n].evmd_labels
 
                     if date.size >= 2 and date[-1] - date[0] > self.maskparam['min_time_span']:
-                        slope, slope_err, residual, count = self.ts[m, n].do_wlr(evmd_threshold=self.evmd_threshold, min_samples=min_samples)
+                        slope, slope_err, residual, count = self.ts[m, n].do_wlr(evmd_threshold=self.evmd_threshold, min_samples=min_samples, min_time_span=self.maskparam['min_time_span'])
                         # if residual > 100:
                         #    print(date, value, uncertainty)
                         self.fitdata['slope'][m, n] = slope
@@ -572,7 +608,7 @@ class DemPile(object):
         mosaic_uncertainty.Array2Raster(self.mosaic['uncertainty'], self.refgeo)
         
     @timeit
-    def do_evmd(self, parallel=False, chunksize=(1000, 1000), min_samples=4):
+    def do_evmd(self, parallel=False, chunksize=(1000, 1000), min_samples=4, use_bitmask=False):
         if parallel:
             import dask
             from dask.diagnostics import ProgressBar
@@ -595,7 +631,13 @@ class DemPile(object):
 
                 for m in range(self.ts.shape[0]):
                     for n in range(self.ts.shape[1]):
-                        self.ts[m, n].add_evmd_labels(results[0][m][n])
+                        if use_bitmask:
+                            bitmask_lbl = self.ts[m, n].bitmask_labels
+                            new_evmd_lbl = [0 if i >=0 and j == 0 else -1 for i, j in zip(results[0][m][n], bitmask_lbl)]
+                            self.ts[m, n].add_evmd_labels(new_evmd_lbl)
+                        else:
+                            self.ts[m, n].add_evmd_labels(results[0][m][n])
+
             else:
                 ### Multile chunks
                 msize = chunksize[0]
@@ -621,13 +663,24 @@ class DemPile(object):
                         idx1 = m // msize
                         idx2 = n_nodes.size * (m % msize) + n // nsize
                         idx3 = n % nsize
-                        self.ts[m, n].add_evmd_labels(super_results[idx1][idx2][idx3])
+                        evmd_lbl = super_results[idx1][idx2][idx3]
+                        if use_bitmask:
+                            bitmask_lbl = self.ts[m, n].bitmask_labels
+                            new_evmd_lbl = [0 if i >=0 and j == 0 else -1 for i, j in zip(evmd_lbl, bitmask_lbl)]
+                            self.ts[m, n].add_evmd_labels(new_evmd_lbl)
+                        else:
+                            self.ts[m, n].add_evmd_labels(evmd_lbl)
         else:
             for m in range(self.ts.shape[0]):
                 self.display_progress(m, self.ts.shape[0])
                 for n in range(self.ts.shape[1]):
-                    exitstate, labels = self.ts[m, n].do_evmd(eps=self.evmd_threshold, min_samples=min_samples)
-                    self.ts[m, n].add_evmd_labels(labels)
+                    exitstate, evmd_lbl = self.ts[m, n].do_evmd(eps=self.evmd_threshold, min_samples=min_samples)
+                    if use_bitmask:
+                        bitmask_lbl = self.ts[m, n].bitmask_labels
+                        new_evmd_lbl = [0 if i >=0 and j == 0 else -1 for i, j in zip(evmd_lbl, bitmask_lbl)]
+                        self.ts[m, n].add_evmd_labels(new_evmd_lbl)
+                    else:
+                        self.ts[m, n].add_evmd_labels(evmd_lbl)
                     
                 
     @staticmethod                
@@ -665,21 +718,36 @@ def onclick_wrapper(data, axs, evmd_threshold, min_samples=4):
             xx = data[row, col].get_date()
             yy = data[row, col].get_value()
             ye = data[row, col].get_uncertainty()
-            slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_threshold=evmd_threshold, min_samples=min_samples, detailed=True)   
+            evmd_lbl = data[row, col].evmd_labels
+            slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_labels=evmd_lbl, evmd_threshold=evmd_threshold, min_samples=min_samples, detailed=True)   
             SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
             SSRes = np.sum((y_good - y_goodest) ** 2)
             SST = np.sum((y_good - np.mean(y_good)) ** 2)
             Rsquared = 1 - SSRes / SST
             axs[0].plot(event.xdata, event.ydata, '.', markersize=10, markeredgewidth=1, markeredgecolor='k', color='xkcd:green')
             axs[1].cla()
-            axs[1].errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='ko')
+            axs[1].errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='k.')
             np.set_printoptions(precision=3)
             np.set_printoptions(suppress=True)
             xye = np.vstack((xx,yy,ye)).T
             print(xye[xye[:,1].argsort()])
             axs[1].plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
-            axs[1].plot(x_good, y_good, '.', color='r', markersize=8, zorder=30)
+            axs[1].plot(x_good, y_good, 's', color='k', markersize=7, zorder=5)
             # axs[1].text(0.1, 0.1, 'R^2 = {:.4f}'.format(Rsquared), transform=ax.transAxes)
+            bitmask_index = data[row, col].bitmask_labels
+            if bitmask_index is not None:
+                bitmask_colorcodes = ['xkcd:lilac', 'xkcd:gray', 'xkcd:light blue',  'xkcd:blue', 
+                                      'xkcd:light yellow',  'xkcd:yellow', 'xkcd:gold', 'xkcd:brown']
+                bitmask_comments = ['Good', 'Edge', 'Water', 'Water+Edge',              
+                                    'Cloud', 'Cloud+Edge', 'Cloud+Water', 'Cloud+Edge+Water']
+                for selected_bit, colorcode in zip([0, 1, 2, 3, 4, 5, 6, 7], bitmask_colorcodes):
+                    selected_group_index = bitmask_index == selected_bit
+                    axs[1].plot(xx[selected_group_index], yy[selected_group_index], '.', color=colorcode, 
+                                markersize=12, markeredgewidth=1, markeredgecolor='k', zorder=selected_bit + 10)
+            else:
+                axs[1].plot(xx, yy, '.', color='xkcd:light grey', 
+                            markersize=12, markeredgewidth=1, markeredgecolor='k', zorder=10)
+
             axs[1].set_xlabel('data[{}, {}] (days, from xxxx-01-01)'.format(row, col))
             axs[1].set_ylabel('height (m)')
     return onclick_ipynb
