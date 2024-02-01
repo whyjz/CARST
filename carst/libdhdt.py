@@ -19,6 +19,7 @@ import pickle
 import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
 from rasterio.errors import RasterioIOError
+from pathlib import Path
 
 def timeit(func):
     def time_wrapper(*args, **kwargs):
@@ -690,16 +691,32 @@ class DemPile(object):
     
     def viz(self, figsize=(8,8), clim=(-6, 6), min_samples=4):
         dhdt_raster, _, _, _ = self.show_dhdt_tifs()
-        try:
-            nodata = dhdt_raster.get_nodata()
-        except RasterioIOError:
-            print(f'No such file: {dhdt_raster.fname} -- We recommend to run polyfit first.')
-            print('TBD')
-        img = dhdt_raster.ReadAsArray()
-        img[img == nodata] = np.nan
+        dhdt_raster_path = Path(dhdt_raster.fpath)
         
-        fig, axs = plt.subplots(2, 1, figsize=figsize)                 
-        first_img = axs[0].imshow(img, cmap='RdBu', vmin=clim[0], vmax=clim[1])
+        fig, axs = plt.subplots(2, 1, figsize=figsize)
+        
+        if dhdt_raster_path.is_file():
+            print(f'Showing {dhdt_raster.fpath} as a basemap') 
+            nodata = dhdt_raster.get_nodata()
+            img = dhdt_raster.ReadAsArray()
+            img[img == nodata] = np.nan
+            first_img = axs[0].imshow(img, cmap='RdBu', vmin=clim[0], vmax=clim[1])
+        else:
+            print(f'{dhdt_raster.fpath} not found; using topography as a basemap.')
+            quick_topography_path = Path(self.dhdtprefix + '_median_topo.tif')
+            if quick_topography_path.is_file():
+                quick_topography = SingleRaster(quick_topography_path.as_posix())
+                nodata = quick_topography.get_nodata()
+                img = quick_topography.ReadAsArray()
+                img[img == nodata] = np.nan
+                first_img = axs[0].imshow(img, cmap='gist_earth')
+            else:
+                get_median_elev = lambda n: np.median(n.get_value())
+                vfunc = np.vectorize(get_median_elev)
+                img = vfunc(self.ts)
+                quick_topography = SingleRaster(quick_topography_path.as_posix())
+                quick_topography.Array2Raster(img, self.refgeo)
+                first_img = axs[0].imshow(img, cmap='gist_earth')
         
         onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples)
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
