@@ -21,6 +21,10 @@ from sklearn.cluster import DBSCAN
 from rasterio.errors import RasterioIOError
 from pathlib import Path
 
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import ConstantKernel
+from sklearn.gaussian_process.kernels import RationalQuadratic
+
 def timeit(func):
     def time_wrapper(*args, **kwargs):
         time_a = datetime.now()
@@ -201,7 +205,16 @@ def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, mi
             else:
                 return slope, slope_err, resid, count
 
-
+def gaussian_process_reg(xx, yy, kernel, alpha=4**2):
+    yy_mean = yy.mean()
+    gaussian_process = GaussianProcessRegressor(kernel=kernel, alpha=alpha, n_restarts_optimizer=5)
+    gaussian_process.fit(xx, yy - yy_mean)
+    x_pred_pos = np.linspace(xx.min(), xx.max(), 200).reshape(-1, 1)
+    mean_prediction, std_prediction = gaussian_process.predict(x_pred_pos, return_std=True)
+    mean_prediction += yy_mean
+    return x_pred_pos, mean_prediction, std_prediction, gaussian_process.kernel_
+            
+            
 class PixelTimeSeries(object):
     """
     Store all measurements of a single pixel in the reference DEM.
@@ -689,7 +702,7 @@ class DemPile(object):
         if m % 100 == 0:
             print(f'{m}/{total} lines processed')
     
-    def viz(self, figsize=(8,8), clim=(-6, 6), min_samples=4):
+    def viz(self, figsize=(8,8), clim=(-6, 6), min_samples=4, reg_method='linear', gp_kernel=None, use_bitmask_only=False):
         dhdt_raster, _, _, _ = self.show_dhdt_tifs()
         dhdt_raster_path = Path(dhdt_raster.fpath)
         
@@ -717,11 +730,17 @@ class DemPile(object):
                 quick_topography = SingleRaster(quick_topography_path.as_posix())
                 quick_topography.Array2Raster(img, self.refgeo)
                 first_img = axs[0].imshow(img, cmap='gist_earth')
-        
-        onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples)
+        if gp_kernel is None:
+            onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples, reg_method=reg_method, use_bitmask_only=use_bitmask_only)
+        else:
+            onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
+                                      gp_kernel=gp_kernel, use_bitmask_only=use_bitmask_only)
+        # onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples, reg_method=reg_method, use_bitmask_only=use_bitmask_only)
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
-def onclick_wrapper(data, axs, evmd_threshold, min_samples=4):
+def onclick_wrapper(data, axs, evmd_threshold, min_samples=4, reg_method='linear', use_bitmask_only=False,
+                   gp_kernel = ConstantKernel(constant_value=160, constant_value_bounds='fixed') * RationalQuadratic(
+                       length_scale=1.2, alpha=0.1, alpha_bounds='fixed', length_scale_bounds='fixed')):
     def onclick_ipynb(event):
         """
         Callback function for mouse click
@@ -735,21 +754,66 @@ def onclick_wrapper(data, axs, evmd_threshold, min_samples=4):
             xx = data[row, col].get_date()
             yy = data[row, col].get_value()
             ye = data[row, col].get_uncertainty()
-            evmd_lbl = data[row, col].evmd_labels
-            slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(xx, yy, ye, evmd_labels=evmd_lbl, evmd_threshold=evmd_threshold, min_samples=min_samples, detailed=True)   
-            SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
-            SSRes = np.sum((y_good - y_goodest) ** 2)
-            SST = np.sum((y_good - np.mean(y_good)) ** 2)
-            Rsquared = 1 - SSRes / SST
+            
+            if use_bitmask_only:
+                bitmask_lbl = data[row, col].bitmask_labels
+                good_idx = bitmask_lbl == 0
+            else:
+                if data[row, col].evmd_labels is None:
+                    exitstate, evmd_lbl = data[row, col].do_evmd(eps=evmd_threshold, min_samples=min_samples)
+                else:
+                    evmd_lbl = data[row, col].evmd_labels
+                good_idx = evmd_lbl >= 0
+            
             axs[0].plot(event.xdata, event.ydata, '.', markersize=10, markeredgewidth=1, markeredgecolor='k', color='xkcd:green')
             axs[1].cla()
             axs[1].errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='k.')
             np.set_printoptions(precision=3)
             np.set_printoptions(suppress=True)
-            xye = np.vstack((xx,yy,ye)).T
-            print(xye[xye[:,1].argsort()])
-            axs[1].plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
-            axs[1].plot(x_good, y_good, 's', color='k', markersize=7, zorder=5)
+            
+            if reg_method == 'gp':
+                # bitmask labels --> ok
+                # evmd labels --> ok
+                
+                xx_gp = xx[good_idx]
+                yy_gp = yy[good_idx]
+                ye_gp = ye[good_idx]
+                xx_gp_yr = xx_gp / 365
+                xx_gp_yr = xx_gp_yr.reshape(-1, 1)
+                alpha = np.median(ye_gp) ** 2
+                x_pred_pos, mean_prediction, std_prediction, optimized_kernel = gaussian_process_reg(xx_gp_yr, yy_gp, kernel=gp_kernel, alpha=alpha)
+                x_pred_pos *= 365
+                axs[1].set_title(str(gp_kernel))
+                axs[1].plot(x_pred_pos, mean_prediction, color='g', linewidth=2, zorder=20)
+                axs[1].plot(xx_gp, yy_gp, 's', color='k', markersize=7, zorder=5)
+                axs[1].fill_between(
+                    x_pred_pos.ravel(),
+                    mean_prediction - 1.96 * std_prediction,
+                    mean_prediction + 1.96 * std_prediction,
+                    alpha=0.5,
+                    label=r"95% confidence interval",
+                    zorder=2,
+                    color='xkcd:seafoam'
+                    )
+                
+            elif reg_method == 'sigmoid':
+                pass   # Not implemented yet
+            elif reg_method == 'linear':
+                # bitmask labels --> not implemented yet
+                # evmd labels --> ok
+                
+                slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(
+                    xx, yy, ye, evmd_labels=evmd_lbl, evmd_threshold=evmd_threshold, min_samples=min_samples, detailed=True)
+                SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
+                SSRes = np.sum((y_good - y_goodest) ** 2)
+                SST = np.sum((y_good - np.mean(y_good)) ** 2)
+                Rsquared = 1 - SSRes / SST
+                axs[1].plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
+                axs[1].plot(x_good, y_good, 's', color='k', markersize=7, zorder=5)
+                
+            # xye = np.vstack((xx,yy,ye)).T
+            # print(xye[xye[:,1].argsort()])
+
             # axs[1].text(0.1, 0.1, 'R^2 = {:.4f}'.format(Rsquared), transform=ax.transAxes)
             bitmask_index = data[row, col].bitmask_labels
             if bitmask_index is not None:
