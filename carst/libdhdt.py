@@ -702,7 +702,7 @@ class DemPile(object):
         if m % 100 == 0:
             print(f'{m}/{total} lines processed')
     
-    def viz(self, figsize=(8,8), clim=(-6, 6), min_samples=4, reg_method='linear', gp_kernel=None, use_bitmask_only=False):
+    def viz(self, figsize=(8,8), clim=(-6, 6), evmd_threshold=self.evmd_threshold, min_samples=4, reg_method='linear', gp_kernel=None, use_bitmask_only=False):
         dhdt_raster, _, _, _ = self.show_dhdt_tifs()
         dhdt_raster_path = Path(dhdt_raster.fpath)
         
@@ -731,14 +731,14 @@ class DemPile(object):
                 quick_topography.Array2Raster(img, self.refgeo)
                 first_img = axs[0].imshow(img, cmap='gist_earth')
         if gp_kernel is None:
-            onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples, reg_method=reg_method, use_bitmask_only=use_bitmask_only)
+            onclick = onclick_wrapper(self.ts, axs, evmd_threshold=evmd_threshold, min_samples=min_samples, reg_method=reg_method, use_bitmask_only=use_bitmask_only)
         else:
-            onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
+            onclick = onclick_wrapper(self.ts, axs, evmd_threshold=evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
                                       gp_kernel=gp_kernel, use_bitmask_only=use_bitmask_only)
         # onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples, reg_method=reg_method, use_bitmask_only=use_bitmask_only)
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
-def onclick_wrapper(data, axs, evmd_threshold, min_samples=4, reg_method='linear', use_bitmask_only=False,
+def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='linear', use_bitmask_only=False,
                    gp_kernel = ConstantKernel(constant_value=160, constant_value_bounds='fixed') * RationalQuadratic(
                        length_scale=1.2, alpha=0.1, alpha_bounds='fixed', length_scale_bounds='fixed')):
     def onclick_ipynb(event):
