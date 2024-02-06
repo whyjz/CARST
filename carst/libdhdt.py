@@ -702,7 +702,7 @@ class DemPile(object):
         if m % 100 == 0:
             print(f'{m}/{total} lines processed')
     
-    def viz(self, figsize=(8,8), clim=(-6, 6), evmd_threshold=self.evmd_threshold, min_samples=4, reg_method='linear', gp_kernel=None, use_bitmask_only=False):
+    def viz(self, figsize=(8,8), clim=(-6, 6), evmd_threshold=8, min_samples=4, reg_method='linear', gp_kernel=None, use_bitmask_only=False):
         dhdt_raster, _, _, _ = self.show_dhdt_tifs()
         dhdt_raster_path = Path(dhdt_raster.fpath)
         
