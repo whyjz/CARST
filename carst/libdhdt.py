@@ -702,7 +702,8 @@ class DemPile(object):
         if m % 100 == 0:
             print(f'{m}/{total} lines processed')
     
-    def viz(self, figsize=(8,8), clim=(-6, 6), evmd_threshold=8, min_samples=4, reg_method='linear', gp_kernel=None, use_bitmask_only=False, use_evmd_only=True):
+    def viz(self, figsize=(8,8), clim=(-6, 6), evmd_threshold=8, min_samples=4, reg_method='linear', gp_kernel=None, 
+            use_bitmask_only=False, use_evmd_only=True, use_matrix_alpha=False):
         dhdt_raster, _, _, _ = self.show_dhdt_tifs()
         dhdt_raster_path = Path(dhdt_raster.fpath)
         
@@ -732,14 +733,14 @@ class DemPile(object):
                 first_img = axs[0].imshow(img, cmap='gist_earth')
         if gp_kernel is None:
             onclick = onclick_wrapper(self.ts, axs, evmd_threshold=evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
-                                      use_bitmask_only=use_bitmask_only, use_evmd_only=use_evmd_only)
+                                      use_bitmask_only=use_bitmask_only, use_evmd_only=use_evmd_only, use_matrix_alpha=use_matrix_alpha)
         else:
             onclick = onclick_wrapper(self.ts, axs, evmd_threshold=evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
-                                      gp_kernel=gp_kernel, use_bitmask_only=use_bitmask_only, use_evmd_only=use_evmd_only)
+                                      gp_kernel=gp_kernel, use_bitmask_only=use_bitmask_only, use_evmd_only=use_evmd_only, use_matrix_alpha=use_matrix_alpha)
         # onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples, reg_method=reg_method, use_bitmask_only=use_bitmask_only)
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
-def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='linear', use_bitmask_only=False, use_evmd_only=True, 
+def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='linear', use_bitmask_only=False, use_evmd_only=True, use_matrix_alpha=False,
                    gp_kernel = ConstantKernel(constant_value=160, constant_value_bounds='fixed') * RationalQuadratic(
                        length_scale=1.2, alpha=0.1, alpha_bounds='fixed', length_scale_bounds='fixed')):
     def onclick_ipynb(event):
@@ -785,7 +786,10 @@ def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='line
                 ye_gp = ye[good_idx]
                 xx_gp_yr = xx_gp / 365
                 xx_gp_yr = xx_gp_yr.reshape(-1, 1)
-                alpha = np.median(ye_gp) ** 2
+                if use_matrix_alpha:
+                    alpha = ye_gp ** 2
+                else:
+                    alpha = np.median(ye_gp) ** 2
                 x_pred_pos, mean_prediction, std_prediction, optimized_kernel = gaussian_process_reg(xx_gp_yr, yy_gp, kernel=gp_kernel, alpha=alpha)
                 x_pred_pos *= 365
                 axs[1].set_title(str(gp_kernel))
