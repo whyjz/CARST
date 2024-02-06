@@ -767,6 +767,7 @@ def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='line
                 if use_evmd_only:
                     good_idx = evmd_lbl >= 0
                 else:
+                    bitmask_lbl = data[row, col].bitmask_labels
                     good_idx = np.logical_and(bitmask_lbl == 0, evmd_lbl >= 0)
             
             axs[0].plot(event.xdata, event.ydata, '.', markersize=10, markeredgewidth=1, markeredgecolor='k', color='xkcd:green')
