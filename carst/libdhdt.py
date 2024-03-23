@@ -11,12 +11,13 @@ try:
     from osgeo import gdal
 except ImportError:
     import gdal    # this was used until GDAL 3.1
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from shapely.geometry import Polygon
 from carst import ConfParams
 from carst.libraster import SingleRaster
 import pickle
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from sklearn.cluster import DBSCAN
 from rasterio.errors import RasterioIOError
 from pathlib import Path
@@ -732,15 +733,15 @@ class DemPile(object):
                 quick_topography.Array2Raster(img, self.refgeo)
                 first_img = axs[0].imshow(img, cmap='gist_earth')
         if gp_kernel is None:
-            onclick = onclick_wrapper(self.ts, axs, evmd_threshold=evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
+            onclick = onclick_wrapper(self.ts, axs, self.refdate, evmd_threshold=evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
                                       use_bitmask_only=use_bitmask_only, use_evmd_only=use_evmd_only, use_matrix_alpha=use_matrix_alpha)
         else:
-            onclick = onclick_wrapper(self.ts, axs, evmd_threshold=evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
+            onclick = onclick_wrapper(self.ts, axs, self.refdate, evmd_threshold=evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
                                       gp_kernel=gp_kernel, use_bitmask_only=use_bitmask_only, use_evmd_only=use_evmd_only, use_matrix_alpha=use_matrix_alpha)
         # onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples, reg_method=reg_method, use_bitmask_only=use_bitmask_only)
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
-def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='linear', use_bitmask_only=False, use_evmd_only=True, use_matrix_alpha=False,
+def onclick_wrapper(data, axs, refdate, evmd_threshold=8, min_samples=4, reg_method='linear', use_bitmask_only=False, use_evmd_only=True, use_matrix_alpha=False,
                    gp_kernel = ConstantKernel(constant_value=160, constant_value_bounds='fixed') * RationalQuadratic(
                        length_scale=1.2, alpha=0.1, alpha_bounds='fixed', length_scale_bounds='fixed')):
     def onclick_ipynb(event):
@@ -773,7 +774,9 @@ def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='line
             
             axs[0].plot(event.xdata, event.ydata, '.', markersize=10, markeredgewidth=1, markeredgecolor='k', color='xkcd:green')
             axs[1].cla()
-            axs[1].errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='k.')
+            xx_date = np.array([refdate + timedelta(days=i) for i in xx])
+            axs[1].errorbar(xx_date, yy, yerr=ye * 2, linewidth=2, fmt='k.')
+            # axs[1].errorbar(xx, yy, yerr=ye * 2, linewidth=2, fmt='k.')
             np.set_printoptions(precision=3)
             np.set_printoptions(suppress=True)
             
@@ -793,10 +796,15 @@ def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='line
                 x_pred_pos, mean_prediction, std_prediction, optimized_kernel = gaussian_process_reg(xx_gp_yr, yy_gp, kernel=gp_kernel, alpha=alpha)
                 x_pred_pos *= 365
                 axs[1].set_title(str(gp_kernel))
-                axs[1].plot(x_pred_pos, mean_prediction, color='g', linewidth=2, zorder=20)
-                axs[1].plot(xx_gp, yy_gp, 's', color='k', markersize=7, zorder=5)
+                x_pred_pos_date = [refdate + timedelta(days=i) for i in x_pred_pos.flatten()]
+                axs[1].plot(x_pred_pos_date, mean_prediction, color='g', linewidth=2, zorder=20)
+                # axs[1].plot(x_pred_pos, mean_prediction, color='g', linewidth=2, zorder=20)
+                xx_gp_date = [refdate + timedelta(days=i) for i in xx_gp]
+                axs[1].plot(xx_gp_date, yy_gp, 's', color='k', markersize=7, zorder=5)
+                # axs[1].plot(xx_gp, yy_gp, 's', color='k', markersize=7, zorder=5)
+                x_pred_pos_date = [refdate + timedelta(days=i) for i in x_pred_pos.ravel()]
                 axs[1].fill_between(
-                    x_pred_pos.ravel(),
+                    x_pred_pos_date,
                     mean_prediction - 1.96 * std_prediction,
                     mean_prediction + 1.96 * std_prediction,
                     alpha=0.5,
@@ -804,6 +812,15 @@ def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='line
                     zorder=2,
                     color='xkcd:seafoam'
                     )
+                # axs[1].fill_between(
+                #     x_pred_pos.ravel(),
+                #     mean_prediction - 1.96 * std_prediction,
+                #     mean_prediction + 1.96 * std_prediction,
+                #     alpha=0.5,
+                #     label=r"95% confidence interval",
+                #     zorder=2,
+                #     color='xkcd:seafoam'
+                #     )
                 
             elif reg_method == 'sigmoid':
                 pass   # Not implemented yet
@@ -817,8 +834,11 @@ def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='line
                 SSRes = np.sum((y_good - y_goodest) ** 2)
                 SST = np.sum((y_good - np.mean(y_good)) ** 2)
                 Rsquared = 1 - SSRes / SST
-                axs[1].plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
-                axs[1].plot(x_good, y_good, 's', color='k', markersize=7, zorder=5)
+                x_good_date = [refdate + timedelta(days=i) for i in x_good]
+                axs[1].plot(x_good_date, y_goodest, color='g', linewidth=2, zorder=20)
+                axs[1].plot(x_good_date, y_good, 's', color='k', markersize=7, zorder=5)
+                # axs[1].plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
+                # axs[1].plot(x_good, y_good, 's', color='k', markersize=7, zorder=5)
                 
             # xye = np.vstack((xx,yy,ye)).T
             # print(xye[xye[:,1].argsort()])
@@ -832,13 +852,21 @@ def onclick_wrapper(data, axs, evmd_threshold=8, min_samples=4, reg_method='line
                                     'Cloud', 'Cloud+Edge', 'Cloud+Water', 'Cloud+Edge+Water']
                 for selected_bit, colorcode in zip([0, 1, 2, 3, 4, 5, 6, 7], bitmask_colorcodes):
                     selected_group_index = bitmask_index == selected_bit
-                    axs[1].plot(xx[selected_group_index], yy[selected_group_index], '.', color=colorcode, 
+                    axs[1].plot(xx_date[selected_group_index], yy[selected_group_index], '.', color=colorcode, 
                                 markersize=12, markeredgewidth=1, markeredgecolor='k', zorder=selected_bit + 10)
+                    # axs[1].plot(xx[selected_group_index], yy[selected_group_index], '.', color=colorcode, 
+                    #             markersize=12, markeredgewidth=1, markeredgecolor='k', zorder=selected_bit + 10)
             else:
-                axs[1].plot(xx, yy, '.', color='xkcd:light grey', 
+                axs[1].plot(xx_date, yy, '.', color='xkcd:light grey', 
                             markersize=12, markeredgewidth=1, markeredgecolor='k', zorder=10)
+                # axs[1].plot(xx, yy, '.', color='xkcd:light grey', 
+                #             markersize=12, markeredgewidth=1, markeredgecolor='k', zorder=10)
 
-            axs[1].set_xlabel('data[{}, {}] (days, from xxxx-01-01)'.format(row, col))
+            axs[1].xaxis.set_major_locator(mdates.YearLocator())
+            axs[1].xaxis.set_minor_locator(mdates.MonthLocator())
+            plt.setp(axs[1].get_xticklabels(), rotation=-30, ha='left')
+            axs[1].grid(axis='x', linestyle='--', color='xkcd:light grey')
+            axs[1].set_xlabel('data[{}, {}]'.format(row, col))
             axs[1].set_ylabel('height (m)')
     return onclick_ipynb
 
