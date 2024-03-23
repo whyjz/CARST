@@ -13,6 +13,7 @@ except:
 	import configparser as ConfigParser    # python 3
 from carst.libraster import SingleRaster
 from datetime import datetime
+from pathlib import Path
 
 class CsvTable:
 
@@ -123,11 +124,41 @@ class ConfParams:
         else:
             print('Warning: No ini file is given. Nothing will run.')
 
+    def verify_path(self, pathstr):
+        """
+        Verify and replace a file path. (now accepting absolute and relative (to the ini file) paths)
+        """
+        pathobj = Path(pathstr)
+        if pathobj.exists():
+            return pathstr
+        else:
+            relative_pathobj = Path(self.fpath).parent / pathobj
+            if relative_pathobj.exists():
+                return str(relative_pathobj)
+            else:
+                raise AssertionError(f'{pathstr} or {relative_pathobj} does not exist.')
+
     def VerifyParam(self):
 
         """
         Verify params and modify them to proper types.
         """
+
+        """
+        Paths that need to be verified:
+        demlist['csvfile']
+        refgeometry['gtiff']
+        result['picklefile']
+        """
+        path_categories = ['demlist', 'refgeometry', 'result']
+        path_arguments = ['csvfile', 'gtiff', 'picklefile']
+        for category, argument in zip(path_categories, path_arguments):
+            if hasattr(self, category):
+                category_dict = getattr(self, category)
+                if argument in category_dict:
+                    category_dict[argument] = self.verify_path(category_dict[argument])
+                    setattr(self, category, category_dict)
+
 
         if hasattr(self, 'regression'):
             for key in self.regression:
