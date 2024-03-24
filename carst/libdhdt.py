@@ -22,6 +22,7 @@ from sklearn.cluster import DBSCAN
 from rasterio.errors import RasterioIOError
 from pathlib import Path
 
+from scipy.optimize import curve_fit
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import ConstantKernel
 from sklearn.gaussian_process.kernels import RationalQuadratic
@@ -205,6 +206,81 @@ def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, mi
                 return slope, slope_err, resid, count, x, y, y
             else:
                 return slope, slope_err, resid, count
+
+
+
+def sigmoid_reg(xx, yy, ye=None, k_bounds=None, x0_bounds=None):
+    xx_rescaled = (xx - np.mean(xx)) / np.std(xx)
+    yy_rescaled = (yy - np.mean(yy)) / np.std(yy)
+    if ye is not None:
+        ye_rescaled = ye / np.std(yy)
+        absolute_sigma=True
+    else:
+        ye_rescaled = None
+        absolute_sigma=False
+    def sigmoid(x, L, k, x0, a1, a0):
+        return L / (1 + np.exp(-k * (x - x0))) + a1 * x + a0
+    def linear(x, a1, a0):
+        return a1 * x + a0
+
+    x_pred_pos_rescaled = np.linspace(xx_rescaled.min(), xx_rescaled.max(), 200)
+    x_pred_pos = x_pred_pos_rescaled * np.std(xx) + np.mean(xx)
+
+    if k_bounds is None:
+        k_bounds = [1, 150]
+    if x0_bounds is None:
+        x0_bounds = [xx_rescaled.min(), xx_rescaled.max()]
+    downward_sigmoid_bounds = ((-np.inf, k_bounds[0], x0_bounds[0], -np.inf, -np.inf), 
+                               (0,       k_bounds[1], x0_bounds[1],  np.inf,  np.inf))
+    upward_sigmoid_bounds   = ((0,       k_bounds[0], x0_bounds[0], -np.inf, -np.inf), 
+                               (np.inf,  k_bounds[1], x0_bounds[1],  np.inf,  np.inf))
+    # downward_sigmoid_p0 = [-1, np.mean(k_bounds), np.mean(x0_bounds), 0, 0]
+    # upward_sigmoid_p0   = [ 1, np.mean(k_bounds), np.mean(x0_bounds), 0, 0]
+    downward_sigmoid_p0 = [-1, 10, 0, 0, 0]
+    upward_sigmoid_p0   = [ 1, 10, 0, 0, 0]
+    
+    try:
+        popt, pcov = curve_fit(sigmoid, xx_rescaled, yy_rescaled, sigma=ye_rescaled, p0=downward_sigmoid_p0, absolute_sigma=absolute_sigma, bounds=downward_sigmoid_bounds, maxfev=5000)
+        sigmoid_height = popt[0] * np.std(yy)
+        sigmoid_height_stderr = np.sqrt(pcov[0, 0]) * np.std(yy)
+        sigmoid_timing = popt[2] * np.std(xx) + np.mean(xx)
+        y_prediction_rescaled = sigmoid(x_pred_pos_rescaled, *popt)
+        y_prediction = y_prediction_rescaled * np.std(yy) + np.mean(yy)
+        exitstate = 1
+        # print(popt)
+        return x_pred_pos, y_prediction, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate
+    except RuntimeError:
+        pass
+
+    try:
+        popt, pcov = curve_fit(sigmoid, xx_rescaled, yy_rescaled, sigma=ye_rescaled, p0=upward_sigmoid_p0, absolute_sigma=absolute_sigma, bounds=upward_sigmoid_bounds, maxfev=5000)
+        sigmoid_height = popt[0] * np.std(yy)
+        sigmoid_height_stderr = np.sqrt(pcov[0, 0]) * np.std(yy)
+        sigmoid_timing = popt[2] * np.std(xx) + np.mean(xx)
+        y_prediction_rescaled = sigmoid(x_pred_pos_rescaled, *popt)
+        y_prediction = y_prediction_rescaled * np.std(yy) + np.mean(yy)
+        exitstate = 2
+        return x_pred_pos, y_prediction, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate
+    except RuntimeError:
+        pass
+
+    try:
+        popt, pcov = curve_fit(linear, xx_rescaled, yy_rescaled, sigma=ye_rescaled, absolute_sigma=absolute_sigma)
+        sigmoid_height = np.nan
+        sigmoid_height_stderr = np.nan
+        sigmoid_timing = np.nan
+        y_prediction_rescaled = linear(x_pred_pos_rescaled, *popt)
+        y_prediction = y_prediction_rescaled * np.std(yy) + np.mean(yy)
+        exitstate = 3
+        return x_pred_pos, y_prediction, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate
+    except RuntimeError:
+        y_prediction_rescaled = np.full_like(x_pred_pos_rescaled, np.nan)
+        sigmoid_height = np.nan
+        sigmoid_height_stderr = np.nan
+        sigmoid_timing = np.nan
+        exitstate = -1
+        return x_pred_pos, y_prediction, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate
+
 
 def gaussian_process_reg(xx, yy, kernel, alpha=4**2):
     yy_mean = yy.mean()
@@ -823,7 +899,20 @@ def onclick_wrapper(data, axs, refdate, evmd_threshold=8, min_samples=4, reg_met
                 #     )
                 
             elif reg_method == 'sigmoid':
-                pass   # Not implemented yet
+                
+                xx_good = xx[good_idx]
+                yy_good = yy[good_idx]
+                ye_good = ye[good_idx]
+                
+                x_pred, y_pred, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate = sigmoid_reg(xx_good, yy_good, ye=ye_good)
+                axs[1].set_title(f'Sigmoid height (2-sigma) = {sigmoid_height:.2f}±{2 * sigmoid_height_stderr:.2f}' )
+                x_pred_date = [refdate + timedelta(days=i) for i in x_pred]
+                axs[1].plot(x_pred_date, y_pred, color='g', linewidth=2, zorder=20)
+                xx_good_date = [refdate + timedelta(days=i) for i in xx_good]
+                axs[1].plot(xx_good_date, yy_good, 's', color='k', markersize=7, zorder=5)
+                if not np.isnan(sigmoid_timing):
+                    axs[1].axvline(refdate + timedelta(days=sigmoid_timing), linestyle='--', color='xkcd:teal')
+                
             elif reg_method == 'linear':
                 # bitmask labels --> not implemented yet
                 # evmd labels --> ok
