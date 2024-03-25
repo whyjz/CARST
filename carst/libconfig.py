@@ -148,10 +148,10 @@ class ConfParams:
         Paths that need to be verified:
         demlist['csvfile']
         refgeometry['gtiff']
-        result['picklefile']
+        xxxx -- result['picklefile']
         """
-        path_categories = ['demlist', 'refgeometry', 'result']
-        path_arguments = ['csvfile', 'gtiff', 'picklefile']
+        path_categories = ['demlist', 'refgeometry'] # , 'result']
+        path_arguments = ['csvfile', 'gtiff'] # , 'picklefile']
         for category, argument in zip(path_categories, path_arguments):
             if hasattr(self, category):
                 category_dict = getattr(self, category)
