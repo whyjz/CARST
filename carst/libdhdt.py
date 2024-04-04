@@ -241,21 +241,35 @@ def sigmoid_reg(xx, yy, ye=None, k_bounds=None, x0_bounds=None):
     
     try:
         popt, pcov = curve_fit(sigmoid, xx_rescaled, yy_rescaled, sigma=ye_rescaled, p0=downward_sigmoid_p0, absolute_sigma=absolute_sigma, bounds=downward_sigmoid_bounds, maxfev=5000)
-        sigmoid_height = popt[0] * np.std(yy)
-        sigmoid_height_stderr = np.sqrt(pcov[0, 0]) * np.std(yy)
+        # sigmoid_height = popt[0] * np.std(yy)
+        sigmoid_height = (popt[0] + (popt[3] * 2 * np.log(99) / popt[1])) * np.std(yy)    # height change between sigmoid component = {0.01L, 0.99L}
+        # sigmoid_height_stderr = np.sqrt(pcov[0, 0]) * np.std(yy)
+        # error propagation assuming k (sharpness of the sigmoid) is fixed 
+        sigmoid_height_stderr = np.sqrt(pcov[0, 0] + pcov[3, 3] * (2 * np.log(99) / popt[1]) ** 2 + 2 * (2 * np.log(99) / popt[1]) * pcov[0, 3]) * np.std(yy)    
         sigmoid_timing = popt[2] * np.std(xx) + np.mean(xx)
         y_prediction_rescaled = sigmoid(x_pred_pos_rescaled, *popt)
         y_prediction = y_prediction_rescaled * np.std(yy) + np.mean(yy)
         exitstate = 1
         # print(popt)
         return x_pred_pos, y_prediction, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate
+    except ValueError:     # "ValueError('array must not contain infs or NaNs')" which seemed to be a bug of curve_fit
+        y_prediction_rescaled = np.full_like(x_pred_pos_rescaled, np.nan)
+        y_prediction = y_prediction_rescaled
+        sigmoid_height = np.nan
+        sigmoid_height_stderr = np.nan
+        sigmoid_timing = np.nan
+        exitstate = -1
+        return x_pred_pos, y_prediction, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate
     except RuntimeError:
         pass
 
     try:
         popt, pcov = curve_fit(sigmoid, xx_rescaled, yy_rescaled, sigma=ye_rescaled, p0=upward_sigmoid_p0, absolute_sigma=absolute_sigma, bounds=upward_sigmoid_bounds, maxfev=5000)
-        sigmoid_height = popt[0] * np.std(yy)
-        sigmoid_height_stderr = np.sqrt(pcov[0, 0]) * np.std(yy)
+        # sigmoid_height = popt[0] * np.std(yy)
+        sigmoid_height = (popt[0] + (popt[3] * 2 * np.log(99) / popt[1])) * np.std(yy)    # height change between sigmoid component = {0.01L, 0.99L}
+        # sigmoid_height_stderr = np.sqrt(pcov[0, 0]) * np.std(yy)
+        # error propagation assuming k (sharpness of the sigmoid) is fixed 
+        sigmoid_height_stderr = np.sqrt(pcov[0, 0] + pcov[3, 3] * (2 * np.log(99) / popt[1]) ** 2 + 2 * (2 * np.log(99) / popt[1]) * pcov[0, 3]) * np.std(yy)    
         sigmoid_timing = popt[2] * np.std(xx) + np.mean(xx)
         y_prediction_rescaled = sigmoid(x_pred_pos_rescaled, *popt)
         y_prediction = y_prediction_rescaled * np.std(yy) + np.mean(yy)
@@ -275,6 +289,7 @@ def sigmoid_reg(xx, yy, ye=None, k_bounds=None, x0_bounds=None):
         return x_pred_pos, y_prediction, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate
     except RuntimeError:
         y_prediction_rescaled = np.full_like(x_pred_pos_rescaled, np.nan)
+        y_prediction = y_prediction_rescaled
         sigmoid_height = np.nan
         sigmoid_height_stderr = np.nan
         sigmoid_timing = np.nan
