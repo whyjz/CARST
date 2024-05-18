@@ -23,6 +23,7 @@ from rasterio.errors import RasterioIOError
 from pathlib import Path
 
 from scipy.optimize import curve_fit
+from scipy.signal import argrelextrema
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import ConstantKernel
 from sklearn.gaussian_process.kernels import RationalQuadratic
@@ -150,9 +151,13 @@ def EVMD_idx(y, validated_value, threshold=6):
     return idx
 
 def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, min_samples=4, min_time_span=365):
+    """
     # wlr = weighted linear regression.
     # exitstate, validated_value, validated_value_idx = EVMD(y, threshold=evmd_threshold)
     # WARNING issue: count does not represent the same meaning in the following if-else statement!!!
+
+    weighted linear regression ver 1. Kept for backward compatibility.
+    """
     if evmd_labels is None:
         exitstate, evmd_labels = EVMD_DBSCAN(x, y, eps=evmd_threshold, min_samples=min_samples)
     else:
@@ -208,8 +213,47 @@ def wlr_corefun(x, y, ye, evmd_labels=None, evmd_threshold=6, detailed=False, mi
                 return slope, slope_err, resid, count
 
 
+def wl_reg(xx, yy, ye=None, min_datapoints=4, min_time_span=365):
+    """
+    weighted linear regression ver 2.
+    """
+    x_pred_pos = np.linspace(xx.min(), xx.max(), 200)
+    duration = (xx.max() - xx.min()) / 365.25
+    if xx.size >= min_datapoints and duration > min_time_span / 365.25:
+        w     = [1 / k for k in ye]
+        G     = np.vstack([xx, np.ones(xx.size)]).T   # defines the model (y = a + bx)
+        W     = np.diag(w)
+        Gw    = W @ G
+        yw    = W @ yy.T                         # assuming y is a 1-by-N array
+        cov_m =     inv(Gw.T @ Gw)               # covariance matrix
+        p     =     inv(Gw.T @ Gw) @ Gw.T @ yw   # model coefficients
+        H     = G @ inv(Gw.T @ Gw) @ Gw.T @ W    # projection matrix
+        h     = np.diag(H)                       # leverage
+        y_est = np.polyval(p, xx)                # the estimate of y
+        ri2   = (yy - y_est) ** 2
+        resid = np.sum(ri2)                      # sum of squared error
+        error = np.sqrt(cov_m[0, 0])
+        p_num = 2                                # how many coefficients we want (in this case, 2 comes from y = a + bx)
+        mse   = resid / (xx.size - p_num)         # mean squared error
+        slope = p[0] * 365.25
+        slope_stderr = np.sqrt(cov_m[0, 0]) * 365.25
+        y_prediction = np.polyval(p, x_pred_pos)
+        # count = x.size
+        # if resid > 100000:
+        #   print(x,y,ye,cookd,goodpoint)
+        # if detailed:
+        #     return slope, slope_err, resid, count, x, y, y_est
+        # else:
+        #     return slope, slope_err, resid, count
+        exitstate = 1
+        return x_pred_pos, y_prediction, slope, slope_stderr, duration, exitstate
+    else:
+        exitstate = -1
+        y_prediction = np.full_like(x_pred_pos, np.nan)
+        return x_pred_pos, y_prediction, slope, slope_stderr, duration, exitstate
+    
 
-def sigmoid_reg(xx, yy, ye=None, k_bounds=None, x0_bounds=None):
+def sigmoid_reg(xx, yy, ye=None, k_bounds=None, x0_bounds=None, downward_first=True):
     xx_rescaled = (xx - np.mean(xx)) / np.std(xx)
     yy_rescaled = (yy - np.mean(yy)) / np.std(yy)
     if ye is not None:
@@ -240,7 +284,12 @@ def sigmoid_reg(xx, yy, ye=None, k_bounds=None, x0_bounds=None):
     upward_sigmoid_p0   = [ 1, 10, 0, 0, 0]
     
     try:
-        popt, pcov = curve_fit(sigmoid, xx_rescaled, yy_rescaled, sigma=ye_rescaled, p0=downward_sigmoid_p0, absolute_sigma=absolute_sigma, bounds=downward_sigmoid_bounds, maxfev=5000)
+        if downward_first:
+            popt, pcov = curve_fit(sigmoid, xx_rescaled, yy_rescaled, sigma=ye_rescaled, p0=downward_sigmoid_p0, 
+                                   absolute_sigma=absolute_sigma, bounds=downward_sigmoid_bounds, maxfev=5000)
+        else:
+            popt, pcov = curve_fit(sigmoid, xx_rescaled, yy_rescaled, sigma=ye_rescaled, p0=upward_sigmoid_p0, 
+                                   absolute_sigma=absolute_sigma, bounds=upward_sigmoid_bounds, maxfev=5000)
         # sigmoid_height = popt[0] * np.std(yy)
         sigmoid_height = (popt[0] + (popt[3] * 2 * np.log(99) / popt[1])) * np.std(yy)    # height change between sigmoid component = {0.01L, 0.99L}
         # sigmoid_height_stderr = np.sqrt(pcov[0, 0]) * np.std(yy)
@@ -264,7 +313,12 @@ def sigmoid_reg(xx, yy, ye=None, k_bounds=None, x0_bounds=None):
         pass
 
     try:
-        popt, pcov = curve_fit(sigmoid, xx_rescaled, yy_rescaled, sigma=ye_rescaled, p0=upward_sigmoid_p0, absolute_sigma=absolute_sigma, bounds=upward_sigmoid_bounds, maxfev=5000)
+        if downward_first:
+            popt, pcov = curve_fit(sigmoid, xx_rescaled, yy_rescaled, sigma=ye_rescaled, p0=upward_sigmoid_p0, 
+                                   absolute_sigma=absolute_sigma, bounds=upward_sigmoid_bounds, maxfev=5000)
+        else:
+            popt, pcov = curve_fit(sigmoid, xx_rescaled, yy_rescaled, sigma=ye_rescaled, p0=downward_sigmoid_p0, 
+                                   absolute_sigma=absolute_sigma, bounds=downward_sigmoid_bounds, maxfev=5000)
         # sigmoid_height = popt[0] * np.std(yy)
         sigmoid_height = (popt[0] + (popt[3] * 2 * np.log(99) / popt[1])) * np.std(yy)    # height change between sigmoid component = {0.01L, 0.99L}
         # sigmoid_height_stderr = np.sqrt(pcov[0, 0]) * np.std(yy)
@@ -297,7 +351,110 @@ def sigmoid_reg(xx, yy, ye=None, k_bounds=None, x0_bounds=None):
         return x_pred_pos, y_prediction, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate
 
 
+def gp_reg(xx, yy, ye=None, kernel=None, return_ystd=False):
+    """
+    GP regression ver 2.
+    """
+    xx_rescaled = (xx - np.mean(xx)) / np.std(xx)
+    xx_rescaled = xx_rescaled.reshape(-1, 1)    # to form a vertical vector
+    yy_rescaled = (yy - np.mean(yy)) / np.std(yy)
+    if ye is not None:
+        ye_rescaled = ye / np.std(yy)
+        alpha = ye_rescaled ** 2
+    else:
+        ye_rescaled = None
+        alpha = 1e-10    # default value, probably not so good
+    if kernel is None:
+        kernel = ConstantKernel(constant_value=160, constant_value_bounds='fixed') * RationalQuadratic(
+                                length_scale=1.2, alpha=0.1, alpha_bounds='fixed', length_scale_bounds='fixed')
+
+    gaussian_process = GaussianProcessRegressor(kernel=kernel, alpha=alpha, n_restarts_optimizer=5)
+    gaussian_process.fit(xx_rescaled, yy_rescaled)
+
+
+    x_pred_pos_rescaled = np.linspace(xx_rescaled.min(), xx_rescaled.max(), 200).reshape(-1, 1)
+    x_pred_pos = x_pred_pos_rescaled * np.std(xx) + np.mean(xx)
+    x_pred_pos = x_pred_pos.flatten()
+    y_prediction_rescaled, y_prediction_std_rescaled = gaussian_process.predict(x_pred_pos_rescaled, return_std=True)
+    y_prediction = y_prediction_rescaled * np.std(yy) + np.mean(yy)
+    y_prediction_std = y_prediction_std_rescaled * np.std(yy)
+
+    #########################################
+    #### Finding transient height change ####
+    #########################################
+
+    localmax_pos = argrelextrema(y_prediction, np.greater)
+    localmax_pos = localmax_pos[0]
+    
+    localmin_pos = argrelextrema(y_prediction, np.less)
+    localmin_pos = localmin_pos[0]
+
+    # Add head and tail to the local_pos
+    if localmin_pos.any() and localmax_pos.any():
+        if localmin_pos[0] < localmax_pos[0]:
+            localmax_pos = np.insert(localmax_pos, 0, 0)
+        else:
+            localmin_pos = np.insert(localmin_pos, 0, 0)
+        if localmin_pos[-1] < localmax_pos[-1]:
+            localmin_pos = np.append(localmin_pos, y_prediction.size - 1)
+        else:
+            localmax_pos = np.append(localmax_pos, y_prediction.size - 1)
+    elif localmin_pos.any() or localmax_pos.any():
+        if localmin_pos:
+            localmax_pos = np.insert(localmax_pos, 0, 0)
+            localmax_pos = np.append(localmax_pos, y_prediction.size - 1)
+        else:
+            localmin_pos = np.insert(localmin_pos, 0, 0)
+            localmin_pos = np.append(localmin_pos, y_prediction.size - 1)
+
+    # Set up transient event duration
+    index_spacing = np.round(730 / (x_pred_pos[1] - x_pred_pos[0]))    # transient duration < 730 days (2 years)
+    index_spacing = index_spacing.astype(int)
+
+    # Search all transient events
+    maxmin_pairs = []
+    for maxpeak_pos in localmax_pos:
+        proximity = np.abs(maxpeak_pos - localmin_pos) <=  index_spacing
+        if np.any(proximity):
+            for minpeak_pos in localmin_pos[proximity]:
+                if maxpeak_pos > minpeak_pos:
+                    maxmin_pairs.append([minpeak_pos, maxpeak_pos])
+                else:
+                    maxmin_pairs.append([maxpeak_pos, minpeak_pos])
+
+    # Find the most significant transient events
+    if maxmin_pairs:
+        dh_list = []
+        dh_std_list = [] 
+        for pair in maxmin_pairs:
+            elev = y_prediction[pair]
+            elev_std = y_prediction_std[pair]
+            elev_change = elev[1] - elev[0]
+            elev_change_std = elev_std[1] + elev_std[0]    # assuming full dependence
+            dh_list.append(elev_change)
+            dh_std_list.append(elev_change_std)
+
+        max_transient_pos = np.argmin(dh_list)
+        max_transient_dh = dh_list[max_transient_pos]
+        max_transient_dh_stderr = dh_std_list[max_transient_pos]
+        max_transient_timing = x_pred_pos[maxmin_pairs[max_transient_pos][0]]
+        exitstate = 1
+    else:
+        max_transient_dh = np.nan
+        max_transient_dh_stderr = np.nan
+        max_transient_timing = np.nan
+        exitstate = -1
+
+    if return_ystd:
+        return x_pred_pos, y_prediction, y_prediction_std, max_transient_dh, max_transient_dh_stderr, max_transient_timing, exitstate, gaussian_process.kernel_
+    else:
+        return x_pred_pos, y_prediction, max_transient_dh, max_transient_dh_stderr, max_transient_timing, exitstate
+
+
 def gaussian_process_reg(xx, yy, kernel, alpha=4**2):
+    """
+    GP regression ver 1. Kept for backward compatibility.
+    """
     yy_mean = yy.mean()
     gaussian_process = GaussianProcessRegressor(kernel=kernel, alpha=alpha, n_restarts_optimizer=5)
     gaussian_process.fit(xx, yy - yy_mean)
@@ -794,7 +951,7 @@ class DemPile(object):
         if m % 100 == 0:
             print(f'{m}/{total} lines processed')
     
-    def viz(self, figsize=(8,8), clim=(-6, 6), evmd_threshold=8, min_samples=4, reg_method='linear', gp_kernel=None, 
+    def viz(self, figsize=(8,8), clim=(-6, 6), evmd_threshold=8, min_samples=4, reg_method='linear', gp_kernel=None, k_bounds=[10, 150], downward_first=True,
             use_bitmask_only=False, use_evmd_only=True, use_matrix_alpha=False):
         dhdt_raster, _, _, _ = self.show_dhdt_tifs()
         dhdt_raster_path = Path(dhdt_raster.fpath)
@@ -825,6 +982,7 @@ class DemPile(object):
                 first_img = axs[0].imshow(img, cmap='gist_earth')
         if gp_kernel is None:
             onclick = onclick_wrapper(self.ts, axs, self.refdate, evmd_threshold=evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
+                                      k_bounds=k_bounds, downward_first=downward_first,
                                       use_bitmask_only=use_bitmask_only, use_evmd_only=use_evmd_only, use_matrix_alpha=use_matrix_alpha)
         else:
             onclick = onclick_wrapper(self.ts, axs, self.refdate, evmd_threshold=evmd_threshold, min_samples=min_samples, reg_method=reg_method, 
@@ -832,8 +990,9 @@ class DemPile(object):
         # onclick = onclick_wrapper(self.ts, axs, self.evmd_threshold, min_samples=min_samples, reg_method=reg_method, use_bitmask_only=use_bitmask_only)
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
     
-def onclick_wrapper(data, axs, refdate, evmd_threshold=8, min_samples=4, reg_method='linear', use_bitmask_only=False, use_evmd_only=True, use_matrix_alpha=False,
-                   gp_kernel = ConstantKernel(constant_value=160, constant_value_bounds='fixed') * RationalQuadratic(
+def onclick_wrapper(data, axs, refdate, evmd_threshold=8, min_samples=4, reg_method='linear', k_bounds=[10, 150], downward_first=True,
+                    use_bitmask_only=False, use_evmd_only=True, use_matrix_alpha=False,
+                    gp_kernel = ConstantKernel(constant_value=160, constant_value_bounds='fixed') * RationalQuadratic(
                        length_scale=1.2, alpha=0.1, alpha_bounds='fixed', length_scale_bounds='fixed')):
     def onclick_ipynb(event):
         """
@@ -872,39 +1031,49 @@ def onclick_wrapper(data, axs, refdate, evmd_threshold=8, min_samples=4, reg_met
             np.set_printoptions(suppress=True)
             
             if reg_method == 'gp':
-                # bitmask labels --> ok
-                # evmd labels --> ok
+
+                xx_good = xx[good_idx]
+                yy_good = yy[good_idx]
+                ye_good = ye[good_idx]
                 
-                xx_gp = xx[good_idx]
-                yy_gp = yy[good_idx]
-                ye_gp = ye[good_idx]
-                xx_gp_yr = xx_gp / 365
-                xx_gp_yr = xx_gp_yr.reshape(-1, 1)
-                if use_matrix_alpha:
-                    alpha = ye_gp ** 2
-                else:
-                    alpha = np.median(ye_gp) ** 2
-                x_pred_pos, mean_prediction, std_prediction, optimized_kernel = gaussian_process_reg(xx_gp_yr, yy_gp, kernel=gp_kernel, alpha=alpha)
-                x_pred_pos *= 365
-                axs[1].set_title(str(gp_kernel))
-                x_pred_pos_date = [refdate + timedelta(days=i) for i in x_pred_pos.flatten()]
-                axs[1].plot(x_pred_pos_date, mean_prediction, color='g', linewidth=2, zorder=20)
-                # axs[1].plot(x_pred_pos, mean_prediction, color='g', linewidth=2, zorder=20)
-                xx_gp_date = [refdate + timedelta(days=i) for i in xx_gp]
-                axs[1].plot(xx_gp_date, yy_gp, 's', color='k', markersize=7, zorder=5)
-                # axs[1].plot(xx_gp, yy_gp, 's', color='k', markersize=7, zorder=5)
-                x_pred_pos_date = [refdate + timedelta(days=i) for i in x_pred_pos.ravel()]
+                x_pred_pos, y_prediction, y_prediction_std, max_transient_dh, max_transient_dh_stderr, max_transient_timing, exitstate, actual_kernel = gp_reg(
+                    xx_good, yy_good, ye=ye_good, kernel=gp_kernel, return_ystd=True)
+
+                axs[1].set_title(str(actual_kernel))
+                x_pred_pos_date = [refdate + timedelta(days=i) for i in x_pred_pos]
+                axs[1].plot(x_pred_pos_date, y_prediction, color='g', linewidth=2, zorder=20)
+                xx_good_date = [refdate + timedelta(days=i) for i in xx_good]
+                axs[1].plot(xx_good_date, yy_good, 's', color='k', markersize=7, zorder=5)
+                # x_pred_pos_date = [refdate + timedelta(days=i) for i in x_pred_pos.ravel()]
                 axs[1].fill_between(
                     x_pred_pos_date,
-                    mean_prediction - 1.96 * std_prediction,
-                    mean_prediction + 1.96 * std_prediction,
+                    y_prediction - 1.96 * y_prediction_std,
+                    y_prediction + 1.96 * y_prediction_std,
                     alpha=0.5,
                     label=r"95% confidence interval",
                     zorder=2,
                     color='xkcd:seafoam'
                     )
+            
+                # xx_gp = xx[good_idx]
+                # yy_gp = yy[good_idx]
+                # ye_gp = ye[good_idx]
+                # xx_gp_yr = xx_gp / 365
+                # xx_gp_yr = xx_gp_yr.reshape(-1, 1)
+                # if use_matrix_alpha:
+                #     alpha = ye_gp ** 2
+                # else:
+                #     alpha = np.median(ye_gp) ** 2
+                # x_pred_pos, mean_prediction, std_prediction, optimized_kernel = gaussian_process_reg(xx_gp_yr, yy_gp, kernel=gp_kernel, alpha=alpha)
+                # x_pred_pos *= 365
+                # axs[1].set_title(str(gp_kernel))
+                # x_pred_pos_date = [refdate + timedelta(days=i) for i in x_pred_pos.flatten()]
+                # axs[1].plot(x_pred_pos_date, mean_prediction, color='g', linewidth=2, zorder=20)
+                # xx_gp_date = [refdate + timedelta(days=i) for i in xx_gp]
+                # axs[1].plot(xx_gp_date, yy_gp, 's', color='k', markersize=7, zorder=5)
+                # x_pred_pos_date = [refdate + timedelta(days=i) for i in x_pred_pos.ravel()]
                 # axs[1].fill_between(
-                #     x_pred_pos.ravel(),
+                #     x_pred_pos_date,
                 #     mean_prediction - 1.96 * std_prediction,
                 #     mean_prediction + 1.96 * std_prediction,
                 #     alpha=0.5,
@@ -912,6 +1081,7 @@ def onclick_wrapper(data, axs, refdate, evmd_threshold=8, min_samples=4, reg_met
                 #     zorder=2,
                 #     color='xkcd:seafoam'
                 #     )
+
                 
             elif reg_method == 'sigmoid':
                 
@@ -919,7 +1089,8 @@ def onclick_wrapper(data, axs, refdate, evmd_threshold=8, min_samples=4, reg_met
                 yy_good = yy[good_idx]
                 ye_good = ye[good_idx]
                 
-                x_pred, y_pred, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate = sigmoid_reg(xx_good, yy_good, ye=ye_good)
+                x_pred, y_pred, sigmoid_height, sigmoid_height_stderr, sigmoid_timing, exitstate = sigmoid_reg(
+                    xx_good, yy_good, ye=ye_good, k_bounds=k_bounds, downward_first=downward_first)
                 axs[1].set_title(f'Sigmoid height (2-sigma) = {sigmoid_height:.2f}±{2 * sigmoid_height_stderr:.2f}' )
                 x_pred_date = [refdate + timedelta(days=i) for i in x_pred]
                 axs[1].plot(x_pred_date, y_pred, color='g', linewidth=2, zorder=20)
@@ -931,18 +1102,26 @@ def onclick_wrapper(data, axs, refdate, evmd_threshold=8, min_samples=4, reg_met
             elif reg_method == 'linear':
                 # bitmask labels --> not implemented yet
                 # evmd labels --> ok
+
+                xx_good = xx[good_idx]
+                yy_good = yy[good_idx]
+                ye_good = ye[good_idx]
+                x_pred, y_pred, slope, slope_stderr, duration, exitstate = wl_reg(xx_good, yy_good, ye=ye_good)
+                axs[1].set_title(f'dh/dt (2-sigma) = {slope:.2f}±{2 * slope_stderr:.2f} m/yr' )
+                x_pred_date = [refdate + timedelta(days=i) for i in x_pred]
+                axs[1].plot(x_pred_date, y_pred, color='g', linewidth=2, zorder=20)
+                xx_good_date = [refdate + timedelta(days=i) for i in xx_good]
+                axs[1].plot(xx_good_date, yy_good, 's', color='k', markersize=7, zorder=5)
                 
-                slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(
-                    xx, yy, ye, evmd_labels=evmd_lbl, evmd_threshold=evmd_threshold, min_samples=min_samples, detailed=True)
-                SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
-                SSRes = np.sum((y_good - y_goodest) ** 2)
-                SST = np.sum((y_good - np.mean(y_good)) ** 2)
-                Rsquared = 1 - SSRes / SST
-                x_good_date = [refdate + timedelta(days=i) for i in x_good]
-                axs[1].plot(x_good_date, y_goodest, color='g', linewidth=2, zorder=20)
-                axs[1].plot(x_good_date, y_good, 's', color='k', markersize=7, zorder=5)
-                # axs[1].plot(x_good, y_goodest, color='g', linewidth=2, zorder=20)
-                # axs[1].plot(x_good, y_good, 's', color='k', markersize=7, zorder=5)
+                # slope, slope_err, residual, count, x_good, y_good, y_goodest = wlr_corefun(
+                #     xx, yy, ye, evmd_labels=evmd_lbl, evmd_threshold=evmd_threshold, min_samples=min_samples, detailed=True)
+                # SSReg = np.sum((y_goodest - np.mean(y_good)) ** 2)
+                # SSRes = np.sum((y_good - y_goodest) ** 2)
+                # SST = np.sum((y_good - np.mean(y_good)) ** 2)
+                # Rsquared = 1 - SSRes / SST
+                # x_good_date = [refdate + timedelta(days=i) for i in x_good]
+                # axs[1].plot(x_good_date, y_goodest, color='g', linewidth=2, zorder=20)
+                # axs[1].plot(x_good_date, y_good, 's', color='k', markersize=7, zorder=5)
                 
             # xye = np.vstack((xx,yy,ye)).T
             # print(xye[xye[:,1].argsort()])
