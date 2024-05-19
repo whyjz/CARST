@@ -100,7 +100,7 @@ def create_ampcor_task(ini):
 
 def multicore_ampcor(downrange, a, imgpair):
 	a.firstSampleAcross = 1
-	a.lastSampleAcross = imgpair[0].GetRasterXSize()
+	a.lastSampleAcross = imgpair[0].get_x_size()
 	a.firstSampleDown = downrange[0]
 	a.lastSampleDown = downrange[1]
 	# a.ampcor(obj, obj2, 0, 0)   # band 0, band 0
@@ -110,7 +110,7 @@ def multicore_ampcor(downrange, a, imgpair):
 def ampcor_task(imgpair, ini):
 	a = create_ampcor_task(ini)
 	downrange = []
-	downsize = imgpair[0].GetRasterYSize()
+	downsize = imgpair[0].get_y_size()
 	threads = ini.pxsettings['threads']
 	downsize_each = int(downsize / threads)
 	for i in range(threads):
