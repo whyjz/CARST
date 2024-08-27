@@ -3,7 +3,7 @@
 Cryosphere And Remote Sensing Toolkit (CARST)
 =============================================
 
-This package analyzes satellite images, particularly SAR and optical images, and monitor changes of glaciers and ice caps through time. CARST toolkit has two main scripts: elevation changes (also known as dh/dt) and feature tracking. You can also import carst with python for using its various modules.
+This package analyzes satellite images, particularly SAR and optical images, and monitor changes of glaciers and ice caps through time. CARST has two main scripts: elevation changes (also known as dh/dt) and feature tracking. You can also import carst with python for using its various modules.
 
 Dependencies
 ------------------------------
