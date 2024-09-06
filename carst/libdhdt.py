@@ -42,22 +42,24 @@ def timeit(func):
 def resample_array(source, reference, method='bilinear', destination=None):
     """
     latest version. 
-    resample the source raster using the extent and spacing provided by the reference raster. Two rasters must be in the same CRS.
+    resample the source raster using the extent and spacing provided by the reference raster.
     
     source: class UtilRaster.SingleRaster object
     reference: class UtilRaster.SingleRaster object
     destination: str, filename for the output to be written. If None, a temporary file (/vismem/) will be used.
     
-    returns: an numpy array, which you can use the methods in UtilRaster to trasform it into a raster.
+    returns: numpy array, which you can use the methods in UtilRaster to trasform it into a raster.
 
-    For better COG processing efficiency, we rasterio to check the if the source and the reference intersect each other.
-    For fasting resampling, we use GDAL and its C library.
+    For better COG processing efficiency, we use rasterio to check if the source and the reference intersect each other.
+    For fast resampling, we use GDAL and its C library.
     """
     
     s_ulx, s_uly, s_lrx, s_lry = source.get_extent()
     source_extent = Polygon([(s_ulx, s_uly), (s_lrx, s_uly), (s_lrx, s_lry), (s_ulx, s_lry)])
+    source_epsg = source.get_epsg()
     ulx, uly, lrx, lry = reference.get_extent()
     reference_extent = Polygon([(ulx, uly), (lrx, uly), (lrx, lry), (ulx, lry)])
+    reference_epsg = reference.get_epsg()
     if source_extent.intersects(reference_extent):
         ds = gdal.Open(source.fpath)
         opts = gdal.WarpOptions(outputBounds=(ulx, lry, lrx, uly), xRes=reference.get_x_res(), yRes=reference.get_y_res(), resampleAlg=method)
@@ -67,7 +69,19 @@ def resample_array(source, reference, method='bilinear', destination=None):
             out_ds = gdal.Warp(destination, ds, options=opts)
         return out_ds.GetRasterBand(1).ReadAsArray()
     else:
-        return np.full((reference.get_y_size(), reference.get_x_size()), reference.get_nodata())
+        if source_epsg != reference_epsg:
+            print(f'{source.fpath} has a different CRS from the reference grid. Perform warping.')
+            ds = gdal.Open(source.fpath)
+            opts = gdal.WarpOptions(outputBounds=(ulx, lry, lrx, uly), xRes=reference.get_x_res(), yRes=reference.get_y_res(), 
+                                    resampleAlg=method, dstSRS=f'EPSG:{reference_epsg}')
+            if not destination:
+                out_ds = gdal.Warp('/vsimem/resampled.tif', ds, options=opts)
+            else:
+                out_ds = gdal.Warp(destination, ds, options=opts)
+            return out_ds.GetRasterBand(1).ReadAsArray()
+        else:
+            print(f'WARNING: {source.fpath} does not intersect with the reference grid. Return all NaNs.')
+            return np.full((reference.get_y_size(), reference.get_x_size()), reference.get_nodata())
 
 
     

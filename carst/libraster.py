@@ -139,6 +139,10 @@ class SingleRaster:
         srs.ImportFromWkt(wkt_text)
         return srs.ExportToProj4()
 
+    def get_epsg(self):
+        with rasterio.open(self.fpath) as src:
+            return src.crs.to_epsg()
+
     def get_x_size(self):
         """ This is 'samples' of a image """
         with rasterio.open(self.fpath) as src:
