@@ -128,7 +128,8 @@ if args.step == 'rmnoise' or args.step is None:
 		                   errmag=SingleRaster(prefix + '_errmag.tif'))
 
 	velo.SNR_CutNoise(snr_threshold=ini.noiseremoval['snr'])
-	velo.Gaussian_CutNoise(sigma=ini.noiseremoval['gaussian_lp_mask_sigma'])
+	velo.Gaussian_CutNoise(sigma=ini.noiseremoval['gaussian_lp_mask_sigma'], 
+                           change_threshold=ini.noiseremoval['gaussian_lp_change_threshold'])
 	velo.SmallObjects_CutNoise(min_size=ini.noiseremoval['min_clump_size'])
 	# velo.MorphoOpen_CutNoise()
 	# velo.Fahnestock_CutNoise()

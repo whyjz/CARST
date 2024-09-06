@@ -473,6 +473,7 @@ class SingleRaster:
         """
 
         from scipy.ndimage import gaussian_filter
+        print(f'Read {self.fpath} and perform Gaussian High Pass filter...')
         data = self.ReadAsArray()
         data = data.astype(float)
         if self.get_nodata() is not None:
@@ -754,9 +755,9 @@ class RasterVelos():
 		raster_mag_cutnoise.Array2Raster(mag_val, self.mag)
 		self.SetMag(raster_mag_cutnoise)
 
-	def Gaussian_CutNoise(self, sigma=1):
+	def Gaussian_CutNoise(self, sigma=1, change_threshold=1):
 		mag_val = self.mag.ReadAsArray()
-		mag_val_ok = Gussian_noise_remover(mag_val, sigma=sigma, nodata_val=self.mag.get_nodata())
+		mag_val_ok = Gussian_noise_remover(mag_val, sigma=sigma, change_threshold=change_threshold, nodata_val=self.mag.get_nodata())
 		raster_mag_cutnoise = SingleRaster(self.mag.fpath.rsplit('.', 1)[0]  + '-GAU.tif')
 		raster_mag_cutnoise.Array2Raster(mag_val_ok, self.mag)
 		self.SetMag(raster_mag_cutnoise)
@@ -815,7 +816,7 @@ class RasterVelos():
 
 
 @timeit
-def Gussian_noise_remover(array, sigma=1, nodata_val=-9999.0):
+def Gussian_noise_remover(array, sigma=1, change_threshold=1, nodata_val=-9999.0):
 
 	"""
 	Gaussian Low Pass filter. Default sigma = 1.
@@ -834,7 +835,7 @@ def Gussian_noise_remover(array, sigma=1, nodata_val=-9999.0):
 	lowpass = vv / ww
 	lowpass[nodata_pos] = nodata_val
 	diff = np.abs(array - lowpass)
-	mask = diff >= 1
+	mask = diff >= change_threshold
 	array[mask] = nodata_val
 	return array
 
