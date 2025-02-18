@@ -37,6 +37,7 @@ from carst import SingleRaster, RasterVelos, ConfParams
 from carst.libft import ampcor_task, writeout_ampcor_task
 from carst.libxyz import ZArray, DuoZArray, AmpcoroffFile, points_in_polygon
 import numpy as np
+from check_path_lib import check_path
 
 parser = ArgumentParser()
 parser.add_argument('config_file', help='Configuration file')
@@ -46,6 +47,9 @@ args = parser.parse_args()
 # ==== Read ini file ====
 
 inipath = args.config_file
+check_path(inipath)
+
+
 ini = ConfParams(inipath)
 ini.ReadParam()
 ini.VerifyParam()
