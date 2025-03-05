@@ -7,6 +7,7 @@ import numpy as np
 from numpy.linalg import inv
 import os
 # import sys
+import time
 try:
     from osgeo import gdal
 except ImportError:
@@ -680,12 +681,32 @@ class DemPile(object):
                 try:
                     znew = resample_array(self.dems[i], self.refgeo, method='bilinear')
                 except RasterioIOError as inst:    # To show and skip the error of a bad url
-                    print(inst)
-                    continue
+                    print(f"RasterioIOError: {inst}")
+                    print(f"Retrying in 0.5 minute.")
+                    time.sleep(30)
+                    try:
+                        znew = resample_array(self.dems[i], self.refgeo, method='bilinear')
+                        print(f"Retry succeeded!")
+                    except RasterioIOError as inst:
+                        print(f"RasterioIOError again: {inst}")
+                        print(f"Aborting this file.")
+                        continue
                 if bitmask:
                     bitmask_fpath = self.dems[i].fpath.replace('dem.tif', 'bitmask.tif')
                     bitmask_dem = SingleRaster(bitmask_fpath)
-                    bitmask_znew = resample_array(bitmask_dem, self.refgeo, method='nearest')
+                    try:
+                        bitmask_znew = resample_array(bitmask_dem, self.refgeo, method='nearest')
+                    except RasterioIOError as inst:    # To show and skip the error of a bad url
+                        print(f"RasterioIOError: {inst}")
+                        print(f"Retrying in 0.5 minute.")
+                        time.sleep(30)
+                        try:
+                            bitmask_znew = resample_array(bitmask_dem, self.refgeo, method='nearest')
+                            print(f"Retry succeeded!")
+                        except RasterioIOError as inst:
+                            print(f"RasterioIOError again: {inst}")
+                            print(f"Aborting this file.")
+                            continue
                 
                 ### Attempt to remove the znew > 0 constraint (failed for now; there is a lot of -9999 points) 
                 # znew_mask = self.refgeomask
