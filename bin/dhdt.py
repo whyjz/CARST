@@ -21,6 +21,9 @@ from carst import ConfParams
 from carst.libdhdt import DemPile, onclick_wrapper
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
+from check_path_lib import check_path
+
 
 parser = ArgumentParser()
 parser.add_argument('config_file', help='Configuration file')
@@ -30,6 +33,8 @@ args = parser.parse_args()
 # ==== Read ini file ====
 
 inipath = args.config_file
+check_path(inipath)
+
 
 # ==== Create a DemPile object and load the config file into the object ====
 
